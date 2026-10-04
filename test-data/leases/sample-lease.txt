@@ -1,0 +1,48 @@
+RESIDENTIAL LEASE AGREEMENT
+
+Property: Marina Crest Residences
+Building: Tower B
+Unit: MC-B-1204 / Apartment 1204
+
+Landlord:
+Marina Crest Holdings W.L.L.
+
+Tenant:
+Omar Hassan
+
+Commencement Date:
+01 January 2027
+
+Expiry Date:
+31 December 2027
+
+Lease Term:
+12 months
+
+Monthly Rent:
+QAR 8,500
+
+Annual Rent:
+QAR 102,000
+
+Security Deposit:
+QAR 8,500
+
+Rent Escalation:
+Upon renewal, rent may increase by 5% subject to applicable law.
+
+Renewal:
+The tenant may request renewal by written notice at least 60 days before expiry. Renewal remains subject to landlord approval and the stated escalation mechanism.
+
+Termination:
+Either party may terminate for material breach after 30 days written notice where the breach remains uncured.
+
+Landlord Signature:
+Marina Crest Holdings W.L.L.
+Signed: Yes
+
+Tenant Signature:
+Omar Hassan
+Signed: Yes
+
+END OF AGREEMENT

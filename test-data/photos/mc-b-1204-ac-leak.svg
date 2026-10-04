@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <title>Illustrated fixture: wall-mounted AC with visible water staining</title>
+  <rect width="800" height="600" fill="#eee9df"/>
+  <rect y="490" width="800" height="110" fill="#b8a78f"/>
+  <path d="M310 210 Q290 300 340 365 Q405 440 500 385 L525 240" fill="#bca57b" opacity="0.5"/>
+  <rect x="200" y="110" width="420" height="125" rx="16" fill="#f7f8f6" stroke="#596a6f" stroke-width="5"/>
+  <path d="M225 190 H595 M225 204 H595 M225 218 H595" stroke="#7b898e" stroke-width="5"/>
+  <circle cx="575" cy="145" r="5" fill="#539688"/>
+  <path d="M390 238 Q377 267 390 275 Q402 267 390 238 M420 300 Q405 330 420 338 Q436 330 420 300" fill="#699daa"/>
+  <text x="35" y="550" font-size="24" font-family="sans-serif" fill="#344449">MC-B-1204 · AC / moisture illustration</text>
+</svg>

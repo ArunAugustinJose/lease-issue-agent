@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum Occupancy {
+  AVAILABLE
+  OCCUPIED
+}
+enum ReviewStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+enum RuleStatus {
+  PASS
+  FAIL
+  NOT_DETERMINABLE
+}
+model Property {
+  id String @id
+  name String
+  location String
+  ownershipEntity String
+  buildings Building[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+model Building {
+  id String @id
+  name String
+  propertyId String
+  property Property @relation(fields: [propertyId], references: [id])
+  units Unit[]
+  @@index([propertyId])
+}
+model Unit {
+  id String @id
+  label String
+  type String
+  areaSqm Decimal @db.Decimal(10,2)
+  parkingBay String
+  status Occupancy
+  buildingId String
+  building Building @relation(fields: [buildingId], references: [id])
+  leases Lease[] @relation("LinkedUnit")
+  candidateLeases Lease[] @relation("CandidateUnit")
+  issues IssueReport[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([buildingId, status])
+}
+model Lease {
+  id String @id @default(cuid())
+  unitId String?
+  unit Unit? @relation("LinkedUnit", fields: [unitId], references: [id])
+  candidateUnitId String?
+  candidateUnit Unit? @relation("CandidateUnit", fields: [candidateUnitId], references: [id])
+  linked Boolean @default(false)
+  processingStatus ProcessingStatus @default(COMPLETED)
+  provider String
+  rulesetVersion String
+  document LeaseDocument?
+  fields LeaseExtractedField[]
+  flags LeaseFlag[]
+  validations LeaseRuleValidation[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([unitId])
+  @@index([candidateUnitId])
+  @@index([processingStatus])
+}
+model LeaseDocument {
+  id String @id @default(cuid())
+  leaseId String @unique
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  filename String
+  storageKey String @unique
+  mimeType String
+  sources LeaseSourceReference[]
+}
+model LeaseExtractedField {
+  id String @id @default(cuid())
+  leaseId String
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  key String
+  originalValue Json
+  currentValue Json
+  amount Decimal? @db.Decimal(18,2)
+  currency String?
+  confidence Float
+  overridden Boolean @default(false)
+  reviewStatus ReviewStatus @default(PENDING)
+  sources LeaseSourceReference[]
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([leaseId, key])
+  @@index([leaseId, reviewStatus])
+}
+model LeaseSourceReference {
+  id String @id @default(cuid())
+  documentId String
+  document LeaseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  fieldId String
+  field LeaseExtractedField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  filename String
+  chunkId String
+  page Int?
+  paragraph Int?
+  line Int?
+  excerpt String
+  confidence Float
+  flags LeaseFlag[]
+  validations LeaseRuleValidation[]
+  @@index([fieldId])
+}
+model LeaseFlag {
+  id String @id @default(cuid())
+  leaseId String
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  severity String
+  message String
+  reviewStatus ReviewStatus @default(PENDING)
+  reviewedAt DateTime?
+  sources LeaseSourceReference[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([leaseId, reviewStatus])
+}
+model LeaseRuleValidation {
+  id String @id @default(cuid())
+  leaseId String
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  ruleId String
+  description String
+  severity String
+  status RuleStatus
+  reason String
+  values Json
+  sources LeaseSourceReference[]
+  updatedAt DateTime @updatedAt
+  @@unique([leaseId, ruleId])
+}
+model IssueReport {
+  id String @id @default(cuid())
+  unitId String
+  unit Unit @relation(fields: [unitId], references: [id])
+  processingStatus ProcessingStatus @default(COMPLETED)
+  provider String
+  photos IssuePhoto[]
+  assessment IssueAssessment?
+  assets DetectedAsset[]
+  damages DetectedDamage[]
+  workOrder DraftWorkOrder?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([unitId, processingStatus])
+}
+model IssuePhoto {
+  id String @id @default(cuid())
+  issueId String
+  issue IssueReport @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  filename String
+  storageKey String @unique
+  mimeType String
+  assessments IssueAssessment[]
+  assets DetectedAsset[]
+  damages DetectedDamage[]
+  workOrders DraftWorkOrder[]
+  @@index([issueId])
+}
+model IssueAssessment {
+  id String @id @default(cuid())
+  issueId String @unique
+  issue IssueReport @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  condition String
+  summary String
+  photos IssuePhoto[]
+}
+model DetectedAsset {
+  id String @id @default(cuid())
+  issueId String
+  issue IssueReport @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label String
+  photos IssuePhoto[]
+  @@index([issueId])
+}
+model DetectedDamage {
+  id String @id @default(cuid())
+  issueId String
+  issue IssueReport @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  label String
+  photos IssuePhoto[]
+  @@index([issueId])
+}
+model DraftWorkOrder {
+  id String @id @default(cuid())
+  issueId String @unique
+  issue IssueReport @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  title String
+  description String
+  reviewStatus ReviewStatus @default(PENDING)
+  reviewedAt DateTime?
+  photos IssuePhoto[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([reviewStatus])
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <title>Illustrated fixture: interior wall crack and worn paint</title>
+  <rect width="800" height="600" fill="#e8e4da"/>
+  <rect y="490" width="800" height="110" fill="#b8a78f"/>
+  <path d="M330 80 L410 140 L382 210 L450 260 L403 335 L460 420" stroke="#68635a" stroke-width="7" fill="none"/>
+  <path d="M410 140 L470 120 M450 260 L510 275 M403 335 L350 360" stroke="#68635a" stroke-width="4" fill="none"/>
+  <path d="M250 250 L310 230 L350 280 L305 330 L260 315Z M490 320 L545 290 L580 335 L540 370Z" fill="#c8bca5"/>
+  <text x="35" y="550" font-size="24" font-family="sans-serif" fill="#344449">MC-B-1204 · Wall damage illustration</text>
+</svg>
