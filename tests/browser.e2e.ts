@@ -123,11 +123,15 @@ async function run() {
   });
   await page.getByRole('link').filter({ hasText: 'Apartment 1204' }).click();
   await page.getByRole('heading', { name: 'No lease record yet' }).waitFor();
-  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
+  assert.equal(
+    await page.locator('.unit-summary button, .unit-summary img').count(),
+    0,
+  );
+  assert(await page.getByLabel('Lease document', { exact: true }).isVisible());
   await page
     .getByLabel('Lease document', { exact: true })
     .setInputFiles('test-data/leases/sample-lease.txt');
-  await page.getByRole('button', { name: 'Extract & review lease' }).click();
+  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
   await page.getByRole('heading', { name: 'Extracted details' }).waitFor();
   const rentRow = page
     .locator('.lease-field-row')
@@ -232,6 +236,12 @@ async function run() {
       .isVisible(),
   );
   await page.getByRole('tab', { name: /Condition & issues/ }).click();
+  assert(
+    await page.getByLabel('Condition photos', { exact: true }).isVisible(),
+  );
+  await page
+    .getByRole('heading', { name: 'No condition reports yet' })
+    .waitFor();
   await page
     .getByLabel('Condition photos')
     .setInputFiles([
@@ -243,11 +253,83 @@ async function run() {
     .getByRole('heading', { name: 'Inspect reported AC and wall damage' })
     .waitFor();
   assert.equal(await page.locator('.photo-grid img').count(), 2);
+  assert.equal(
+    await page.getByLabel('Condition photos', { exact: true }).inputValue(),
+    '',
+  );
   await page.getByRole('button', { name: 'Accept draft' }).click();
   await page
     .locator('.work-order .badge')
     .filter({ hasText: 'accepted' })
     .waitFor();
+  await page.getByRole('button', { name: 'Reject draft', exact: true }).click();
+  await page.locator('.work-order .badge.rejected').waitFor();
+  await page.getByRole('button', { name: 'Accept draft', exact: true }).click();
+  await page.locator('.work-order .badge.accepted').waitFor();
+  await page
+    .getByLabel('Condition photos', { exact: true })
+    .setInputFiles('test-data/photos/mc-b-1204-ac-leak.svg');
+  await page
+    .getByAltText('Upload preview: mc-b-1204-ac-leak.svg', { exact: true })
+    .waitFor();
+  assert.equal(await page.locator('.preview-grid img').count(), 1);
+  await page.getByRole('button', { name: 'Create condition report' }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('.condition-report-card').length === 2,
+  );
+  await page
+    .getByRole('tab', { name: 'Condition & issues 2', exact: true })
+    .waitFor();
+  const singleReport = page
+    .locator('.condition-report-card')
+    .filter({ has: page.locator('.single-photo') });
+  await singleReport
+    .getByRole('button', { name: 'Accept draft', exact: true })
+    .click();
+  await singleReport.locator('.work-order .badge.accepted').waitFor();
+  assert.equal(await page.locator('.photo-grid img').count(), 3);
+  for (const width of [1440, 1280, 1024, 768, 430, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.screenshot({
+      path: `test-results/condition-${width}.png`,
+      fullPage: true,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+      false,
+      `Condition workspace overflows at ${width}px`,
+    );
+    assert(
+      await page.getByLabel('Condition photos', { exact: true }).isVisible(),
+    );
+    assert(
+      await page
+        .getByRole('button', { name: 'View lease records', exact: true })
+        .isVisible(),
+    );
+    if (width < 1100) {
+      const upload = await page
+        .locator('.condition-upload-panel')
+        .boundingBox();
+      const reports = await page
+        .locator('.condition-report-list')
+        .boundingBox();
+      const context = await page
+        .locator('.condition-context-card')
+        .boundingBox();
+      assert(
+        upload &&
+          reports &&
+          context &&
+          upload.y < reports.y &&
+          reports.y < context.y,
+        'Mobile order should be upload, reports, context',
+      );
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: 'test-results/issues-desktop.png',
     fullPage: true,
@@ -268,14 +350,19 @@ async function run() {
   await page.getByRole('tab', { name: /Condition & issues/ }).click();
   await page
     .locator('.work-order .badge')
+    .first()
     .filter({ hasText: 'accepted' })
     .waitFor();
-  await page.getByRole('tab', { name: /Lease records/ }).click();
-  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'View lease records', exact: true })
+    .click();
+  await page
+    .getByRole('tab', { name: /Lease records/, selected: true })
+    .waitFor();
   await page
     .getByLabel('Lease document', { exact: true })
     .setInputFiles('test-data/leases/problematic-lease.txt');
-  await page.getByRole('button', { name: 'Extract & review lease' }).click();
+  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
   await page
     .locator('.lease-record-summary')
     .getByText('problematic-lease.txt', { exact: true })
@@ -341,7 +428,7 @@ async function run() {
   }
   assert.deepEqual(errors, [], 'Browser runtime errors');
   console.log(
-    'Browser E2E passed: upload, source, 16 owner reviews, occupancy, two photos, draft acceptance, persistence, desktop and mobile.',
+    'Browser E2E passed: inline lease upload, sources, owner reviews, occupancy, single/multiple photos, draft accept/reject, context, persistence and six viewport sizes.',
   );
 }
 run()

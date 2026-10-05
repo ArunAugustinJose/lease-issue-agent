@@ -20,7 +20,9 @@ import type {
   IssueView,
 } from '@marina/contracts';
 import { api } from '../lib/api';
-import { Badge, LeaseReview, IssueCard } from './review';
+import { ConditionIssuesTab } from './condition/tab';
+import './condition/styles.css';
+import { Badge, LeaseReview } from './review';
 import {
   UnitSummary,
   UnitWorkspaceTabs,
@@ -43,16 +45,12 @@ function Loading() {
 }
 export function LeaseUpload({
   onComplete,
-  onCancel,
+  inline = false,
 }: {
   onComplete: (lease: LeaseView) => void;
-  onCancel?: () => void;
+  inline?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const focusOnOpen = Boolean(onCancel);
-  useEffect(() => {
-    if (focusOnOpen) inputRef.current?.focus();
-  }, [focusOnOpen]);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -69,6 +67,7 @@ export function LeaseUpload({
         try {
           onComplete(await api<LeaseView>('/leases', { method: 'POST', body }));
           setFile(null);
+          if (inputRef.current) inputRef.current.value = '';
         } catch (e) {
           setError((e as Error).message);
         } finally {
@@ -77,7 +76,7 @@ export function LeaseUpload({
       }}
     >
       <label className="file-label">
-        <Upload size={22} />
+        <Upload size={22} aria-hidden />
         <strong>Upload a lease document</strong>
         <span>PDF, DOCX or TXT · Maximum 10 MB</span>
         <input
@@ -91,17 +90,29 @@ export function LeaseUpload({
       </label>
       {file && <p className="selected-file">{file.name}</p>}
       <button className="primary" disabled={!file || busy}>
-        {busy ? 'Processing document…' : 'Extract & review lease'}
-        <ArrowUpRight size={16} />
+        {busy
+          ? 'Processing document…'
+          : inline
+            ? 'Upload lease'
+            : 'Extract & review lease'}
+        <ArrowUpRight size={16} aria-hidden />
       </button>
       {busy && (
         <p role="status">
-          {onCancel && <span className="spinner" aria-hidden />}Reading source
+          {inline && <span className="spinner" aria-hidden />}Reading source
           text and checking owner rules…
         </p>
       )}
-      {onCancel && (
-        <button type="button" disabled={busy} onClick={onCancel}>
+      {inline && file && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setFile(null);
+            setError('');
+            if (inputRef.current) inputRef.current.value = '';
+          }}
+        >
           Cancel
         </button>
       )}
@@ -224,13 +235,14 @@ export function Overview() {
     </>
   );
 }
-function PhotoUpload({
+export function PhotoUpload({
   unitId,
   onComplete,
 }: {
   unitId: string;
   onComplete: (issue: IssueView) => void;
 }) {
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<{ url: string; filename: string }[]>(
     [],
@@ -247,7 +259,7 @@ function PhotoUpload({
   }, [files]);
   return (
     <form
-      className="upload-form"
+      className="upload-form condition-upload-form"
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
@@ -258,6 +270,7 @@ function PhotoUpload({
         try {
           onComplete(await api<IssueView>('/issues', { method: 'POST', body }));
           setFiles([]);
+          if (photoInputRef.current) photoInputRef.current.value = '';
         } catch (e) {
           setError((e as Error).message);
         } finally {
@@ -270,11 +283,13 @@ function PhotoUpload({
         <input value={unitId} readOnly />
       </label>
       <label className="file-label">
-        <Camera size={22} />
+        <Camera size={26} aria-hidden />
         <strong>Add condition photos</strong>
-        <span>PNG, JPEG, WebP or safe SVG · Up to 8 photos, 10 MB each</span>
+        <span>PNG, JPEG, WebP or safe SVG</span>
+        <span>Up to 8 photos, 10 MB each</span>
         <input
           aria-label="Condition photos"
+          ref={photoInputRef}
           type="file"
           multiple
           accept=".png,.jpg,.jpeg,.webp,.svg"
@@ -308,10 +323,11 @@ function PhotoUpload({
       )}
       <button className="primary" disabled={!files.length || busy}>
         {busy ? 'Assessing photos…' : 'Create condition report'}
-        <ArrowUpRight size={16} />
+        <ArrowUpRight size={16} aria-hidden />
       </button>
       {busy && (
         <p role="status">
+          <span className="spinner" aria-hidden />
           Preparing photo evidence and a draft for your review…
         </p>
       )}
@@ -324,7 +340,7 @@ export function UnitWorkspace({ id }: { id: string }) {
   const [error, setError] = useState('');
   const [active, setActive] = useState<'lease' | 'issues'>('lease');
   const [uploaded, setUploaded] = useState<LeaseView | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+
   const load = useCallback(async () => {
     try {
       setUnit(await api<UnitDetail>(`/units/${encodeURIComponent(id)}`));
@@ -359,12 +375,7 @@ export function UnitWorkspace({ id }: { id: string }) {
         <ArrowLeft size={16} aria-hidden />
         All units
       </Link>
-      <UnitSummary
-        unit={unit}
-        showUpload={active === 'lease'}
-        uploadOpen={uploadOpen}
-        onUpload={() => setUploadOpen(true)}
-      />
+      <UnitSummary unit={unit} />
       <UnitWorkspaceTabs
         active={active}
         onChange={setActive}
@@ -378,29 +389,21 @@ export function UnitWorkspace({ id }: { id: string }) {
         hidden={active !== 'lease'}
         tabIndex={0}
       >
-        {uploadOpen && (
-          <section
-            className="lease-upload-panel"
-            id="unit-lease-upload"
-            aria-labelledby="upload-panel-title"
-          >
-            <h2 id="upload-panel-title">
-              <Upload size={20} aria-hidden />
-              Upload lease document
-            </h2>
-            <p>
-              Upload a lease to extract details and validate it against owner
-              standards.
-            </p>
-            <LeaseUpload
-              onCancel={() => setUploadOpen(false)}
-              onComplete={(lease) => {
-                updateLease(lease);
-                setUploadOpen(false);
-              }}
-            />
-          </section>
-        )}
+        <section
+          className="lease-upload-panel lease-inline-upload"
+          id="unit-lease-upload"
+          aria-labelledby="upload-panel-title"
+        >
+          <h2 id="upload-panel-title">
+            <Upload size={20} aria-hidden />
+            Upload lease document
+          </h2>
+          <p>
+            Upload a lease to extract details and validate it against owner
+            standards.
+          </p>
+          <LeaseUpload inline onComplete={updateLease} />
+        </section>
         {leases.length ? (
           leases.map((lease) => (
             <div className="unit-lease-record" key={lease.id}>
@@ -425,7 +428,7 @@ export function UnitWorkspace({ id }: { id: string }) {
               this unit.
             </p>
             <p className="muted">
-              Choose Upload lease in the unit summary to get started.
+              Choose a document in the upload area above to get started.
             </p>
           </div>
         )}
@@ -437,59 +440,22 @@ export function UnitWorkspace({ id }: { id: string }) {
         hidden={active !== 'issues'}
         tabIndex={0}
       >
-        <div className="workspace-layout">
-          <section aria-label="Condition reports">
-            {unit.issues.length ? (
-              unit.issues.map((issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  onChange={() => {
-                    void load();
-                  }}
-                />
-              ))
-            ) : (
-              <div className="empty-state">
-                <Camera size={36} />
-                <h2>A clear view starts here</h2>
-                <p>
-                  Report a condition with one or more photos. Findings and a
-                  draft work order will stay linked to this unit.
-                </p>
-              </div>
-            )}
-          </section>
-          <aside>
-            <div className="panel sticky">
-              <span className="eyebrow">Property issue agent</span>
-              <h2>Report a condition</h2>
-              <PhotoUpload
-                unitId={unit.id}
-                onComplete={() => {
-                  void load();
-                }}
-              />
-            </div>
-            <div className="context-card">
-              <h3>Unit context</h3>
-              <p>
-                <FileText size={17} />
-                {unit.leases.length} lease records
-              </p>
-              <p>
-                <Camera size={17} />
-                {unit.issues.length} condition reports
-              </p>
-              <button
-                className="text-button"
-                onClick={() => setActive('lease')}
-              >
-                View lease records →
-              </button>
-            </div>
-          </aside>
-        </div>
+        <ConditionIssuesTab
+          issues={unit.issues}
+          leaseCount={leases.length}
+          onRefresh={() => {
+            void load();
+          }}
+          onLeaseTab={() => setActive('lease')}
+          upload={
+            <PhotoUpload
+              unitId={unit.id}
+              onComplete={() => {
+                void load();
+              }}
+            />
+          }
+        />
       </div>
     </div>
   );

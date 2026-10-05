@@ -1,57 +1,45 @@
 'use client';
 import { useRef, type KeyboardEvent } from 'react';
-import { BedDouble, Ruler, Car, Upload, FileText, Camera } from 'lucide-react';
+import {
+  BedDouble,
+  Ruler,
+  Car,
+  Building2,
+  FileText,
+  Camera,
+} from 'lucide-react';
 import type { UnitDetail } from '@marina/contracts';
 import { Badge } from './review-ui';
 
-export function UnitSummary({
-  unit,
-  showUpload,
-  uploadOpen,
-  onUpload,
-}: {
-  unit: UnitDetail;
-  showUpload: boolean;
-  uploadOpen: boolean;
-  onUpload: () => void;
-}) {
+export function UnitSummary({ unit }: { unit: UnitDetail }) {
   return (
     <section className="unit-header unit-summary">
-      <div>
-        <p className="eyebrow">
-          {unit.property} / {unit.building}
-        </p>
-        <div className="unit-title">
-          <h1>{unit.label}</h1>
-          <Badge status={unit.status} />
-        </div>
-        <p className="external-id">{unit.id}</p>
-        <div className="unit-facts">
-          <span>
-            <BedDouble size={16} aria-hidden />
-            {unit.type}
-          </span>
-          <span>
-            <Ruler size={16} aria-hidden />
-            {unit.areaSqm} m²
-          </span>
-          <span>
-            <Car size={16} aria-hidden />
-            Parking {unit.parkingBay}
-          </span>
+      <div className="unit-summary-identity">
+        <span className="unit-building-icon">
+          <Building2 size={26} aria-hidden />
+        </span>
+        <div>
+          <div className="unit-title">
+            <h1>{unit.label}</h1>
+            <Badge status={unit.status} />
+          </div>
+          <p className="external-id">Unit ID: {unit.id}</p>
         </div>
       </div>
-      {showUpload && (
-        <button
-          className="primary unit-upload-trigger"
-          aria-expanded={uploadOpen}
-          aria-controls="unit-lease-upload"
-          onClick={onUpload}
-        >
-          <Upload size={17} aria-hidden />
-          Upload lease
-        </button>
-      )}
+      <div className="unit-facts">
+        <span>
+          <BedDouble size={16} aria-hidden />
+          {unit.type}
+        </span>
+        <span>
+          <Ruler size={16} aria-hidden />
+          {unit.areaSqm} m²
+        </span>
+        <span>
+          <Car size={16} aria-hidden />
+          Parking {unit.parkingBay}
+        </span>
+      </div>
     </section>
   );
 }

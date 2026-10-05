@@ -10,7 +10,7 @@ import {
   type Value,
   type IssueView,
 } from '@marina/contracts';
-import { fileUrl, patch } from '../lib/api';
+import { ConditionReportCard } from './condition/report';
 import { Badge, displayValue } from './review-ui';
 export { Badge, displayValue } from './review-ui';
 import { LeaseRecord } from './lease/record';
@@ -209,114 +209,5 @@ export function IssueCard({
   issue: IssueView;
   onChange: (issue: IssueView) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  async function review(status: ReviewStatus) {
-    setBusy(true);
-    try {
-      onChange(
-        await patch<IssueView>(`/work-orders/${issue.workOrder.id}`, {
-          status,
-        }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const evidence = (ids: string[]) =>
-    ids
-      .map((id) => issue.photos.find((p) => p.id === id)?.filename ?? id)
-      .join(', ');
-  return (
-    <article className="issue-card">
-      <div className="row">
-        <h3>Condition report</h3>
-        <Badge status={issue.condition} />
-      </div>
-      <div className="photo-grid">
-        {issue.photos.map((p) => (
-          <a key={p.id} href={fileUrl(p.url)} target="_blank" rel="noreferrer">
-            <img
-              src={fileUrl(p.url)}
-              alt={`Reported condition evidence: ${p.filename}`}
-              width={400}
-              height={300}
-            />
-            <small>{p.filename}</small>
-          </a>
-        ))}
-      </div>
-      <p className="muted">{issue.summary}</p>
-      <div className="finding-grid">
-        <div>
-          <h4>Visible contents</h4>
-          {issue.assets.length ? (
-            issue.assets.map((a, i) => (
-              <p key={i}>
-                {a.label}
-                <small className="evidence-name">
-                  Source: {evidence(a.photoIds)}
-                </small>
-              </p>
-            ))
-          ) : (
-            <p className="muted">Could not determine</p>
-          )}
-        </div>
-        <div>
-          <h4>Visible issues</h4>
-          {issue.damages.length ? (
-            issue.damages.map((d, i) => (
-              <p key={i}>
-                {d.label}
-                <small className="evidence-name">
-                  Source: {evidence(d.photoIds)}
-                </small>
-              </p>
-            ))
-          ) : (
-            <p className="muted">No findings determined by stub</p>
-          )}
-        </div>
-      </div>
-      <div className="work-order">
-        <div className="row">
-          <span className="eyebrow">Agent-generated draft work order</span>
-          <Badge status={issue.workOrder.reviewStatus} />
-        </div>
-        <h3>{issue.workOrder.title}</h3>
-        <p>{issue.workOrder.description}</p>
-        <p className="muted">Affected unit: {issue.unitId}</p>
-        <small>Evidence: {evidence(issue.workOrder.photoIds)}</small>
-        <div className="actions">
-          <button
-            className="primary small"
-            disabled={busy}
-            onClick={() => review('ACCEPTED')}
-          >
-            <Check size={15} />
-            Accept draft
-          </button>
-          <button
-            className="small danger"
-            disabled={busy}
-            onClick={() => review('REJECTED')}
-          >
-            <X size={15} />
-            Reject draft
-          </button>
-        </div>
-        <small>
-          Acceptance records your decision. No maintenance job is dispatched.
-        </small>
-      </div>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </article>
-  );
+  return <ConditionReportCard issue={issue} onChange={onChange} />;
 }
