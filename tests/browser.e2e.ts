@@ -177,6 +177,25 @@ async function run() {
       false,
       `Lease workspace overflows at ${width}px`,
     );
+    assert(
+      await page.getByLabel('Lease document', { exact: true }).isVisible(),
+    );
+    assert(
+      await page
+        .getByRole('button', { name: 'Upload lease', exact: true })
+        .isVisible(),
+    );
+    assert.equal(
+      await page.locator('.field-table').first().locator('thead th').count(),
+      6,
+    );
+    if (width >= 1280) {
+      const upload = await page.locator('#unit-lease-upload').boundingBox();
+      assert(
+        upload && upload.height < 150,
+        'Desktop upload should remain compact',
+      );
+    }
     await rentRow.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.getByLabel('Current value — Monthly rent (QAR)').waitFor();
     assert(

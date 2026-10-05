@@ -63,10 +63,12 @@ export function LeaseExtractedDetails({
   fields,
   locked,
   onReview,
+  separateSource = false,
 }: {
   fields: Field[];
   locked: boolean;
   onReview: ReviewField;
+  separateSource?: boolean;
 }) {
   return (
     <section className="lease-section" aria-label="Extracted details">
@@ -93,6 +95,7 @@ export function LeaseExtractedDetails({
           );
           return values.length ? (
             <LeaseFieldGroup
+              separateSource={separateSource}
               key={group.name}
               name={group.name}
               Icon={group.icon}
@@ -112,12 +115,14 @@ function LeaseFieldGroup({
   fields,
   locked,
   onReview,
+  separateSource,
 }: {
   name: string;
   Icon: (typeof groups)[number]['icon'];
   fields: Field[];
   locked: boolean;
   onReview: ReviewField;
+  separateSource: boolean;
 }) {
   const [open, setOpen] = useState(name === 'Rent');
   const [editing, setEditing] = useState<string | null>(null);
@@ -152,11 +157,13 @@ function LeaseFieldGroup({
               <th scope="col">Current value</th>
               <th scope="col">Status</th>
               <th scope="col">Actions</th>
+              {separateSource && <th scope="col">View source</th>}
             </tr>
           </thead>
           <tbody>
             {fields.map((field) => (
               <LeaseFieldRow
+                separateSource={separateSource}
                 key={field.id}
                 field={field}
                 locked={locked}
@@ -181,6 +188,7 @@ export function LeaseFieldRow({
   onEdit,
   onCloseEdit,
   onReview,
+  separateSource = false,
 }: {
   field: Field;
   locked: boolean;
@@ -188,6 +196,7 @@ export function LeaseFieldRow({
   onEdit: () => void;
   onCloseEdit: () => void;
   onReview: ReviewField;
+  separateSource?: boolean;
 }) {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -260,22 +269,40 @@ export function LeaseFieldRow({
               Reject
             </button>
           </div>
-          <button
-            className="lease-source-trigger"
-            aria-expanded={sourceOpen}
-            aria-controls={sourceId}
-            onClick={() => {
-              if (editing) onCloseEdit();
-              setSourceOpen(!sourceOpen);
-            }}
-          >
-            View source
-            <Chevron open={sourceOpen} />
-          </button>
+          {!separateSource && (
+            <button
+              className="lease-source-trigger"
+              aria-expanded={sourceOpen}
+              aria-controls={sourceId}
+              onClick={() => {
+                if (editing) onCloseEdit();
+                setSourceOpen(!sourceOpen);
+              }}
+            >
+              View source
+              <Chevron open={sourceOpen} />
+            </button>
+          )}
         </td>
+        {separateSource && (
+          <td className="lease-source-cell">
+            <button
+              className="lease-source-trigger"
+              aria-expanded={sourceOpen}
+              aria-controls={sourceId}
+              onClick={() => {
+                if (editing) onCloseEdit();
+                setSourceOpen(!sourceOpen);
+              }}
+            >
+              View source
+              <Chevron open={sourceOpen} />
+            </button>
+          </td>
+        )}
       </tr>
       <tr className="lease-detail-row">
-        <td colSpan={5}>
+        <td colSpan={separateSource ? 6 : 5}>
           <Expansion id={editId} open={editing && !locked}>
             <LeaseFieldEditPanel
               key={editing ? 'editing' : 'closed'}

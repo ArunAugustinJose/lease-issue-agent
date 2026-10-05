@@ -196,11 +196,15 @@ export function FieldCard({
 export function LeaseReview({
   lease,
   onChange,
+  compactTab = false,
 }: {
   lease: LeaseView;
   onChange: (lease: LeaseView) => void;
+  compactTab?: boolean;
 }) {
-  return <LeaseRecord lease={lease} onChange={onChange} />;
+  return (
+    <LeaseRecord lease={lease} onChange={onChange} compactTab={compactTab} />
+  );
 }
 export function IssueCard({
   issue,

@@ -9,14 +9,17 @@ import { NeedsAttention, OwnerAcceptanceStandards } from './standards';
 export function LeaseRecord({
   lease,
   onChange,
+  compactTab = false,
 }: {
   lease: LeaseView;
   onChange: (lease: LeaseView) => void;
+  compactTab?: boolean;
 }) {
   return (
     <div className="lease-redesign">
       <LeaseRecordSummary lease={lease} />
       <LeaseExtractedDetails
+        separateSource={compactTab}
         fields={lease.fields}
         locked={lease.linked}
         onReview={async (field, status, value) =>

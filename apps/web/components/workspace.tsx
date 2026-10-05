@@ -22,6 +22,7 @@ import type {
 import { api } from '../lib/api';
 import { ConditionIssuesTab } from './condition/tab';
 import './condition/styles.css';
+import './lease/tab.css';
 import { Badge, LeaseReview } from './review';
 import {
   UnitSummary,
@@ -77,7 +78,7 @@ export function LeaseUpload({
     >
       <label className="file-label">
         <Upload size={22} aria-hidden />
-        <strong>Upload a lease document</strong>
+        {!inline && <strong>Upload a lease document</strong>}
         <span>PDF, DOCX or TXT · Maximum 10 MB</span>
         <input
           aria-label="Lease document"
@@ -384,6 +385,7 @@ export function UnitWorkspace({ id }: { id: string }) {
       />
       <div
         id="unit-panel-lease"
+        className="lease-records-tab"
         role="tabpanel"
         aria-labelledby="unit-tab-lease"
         hidden={active !== 'lease'}
@@ -416,7 +418,7 @@ export function UnitWorkspace({ id }: { id: string }) {
                     </p>
                   </div>
                 )}
-              <LeaseReview lease={lease} onChange={updateLease} />
+              <LeaseReview lease={lease} onChange={updateLease} compactTab />
             </div>
           ))
         ) : (
