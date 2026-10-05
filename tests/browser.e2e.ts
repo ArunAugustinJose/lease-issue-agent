@@ -39,7 +39,7 @@ async function run() {
     { env: process.env, stdio: 'pipe' },
   );
   app = await createApp();
-  await app.listen(4000, '127.0.0.1');
+  await app.listen(4001, '127.0.0.1');
   // Test the production build served through the same URLs as local setup.
   web = spawn(
     process.execPath,
@@ -77,13 +77,24 @@ async function run() {
   const page = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
   });
+  // Keep any developer API on 4000 untouched; use our isolated test database.
+  await page.route('http://localhost:4000/**', async (route) => {
+    await route.continue({
+      url: route.request().url().replace('localhost:4000', '127.0.0.1:4001'),
+    });
+  });
   page.on('console', (message) => {
     if (message.type() === 'error')
       console.error('Browser console:', message.text());
   });
-  page.on('response', (response) => {
+  page.on('response', async (response) => {
     if (response.status() >= 400)
-      console.error('HTTP error:', response.status(), response.url());
+      console.error(
+        'HTTP error:',
+        response.status(),
+        response.url(),
+        await response.text(),
+      );
   });
   page.on('requestfailed', (request) =>
     console.error('Request failed:', request.url(), request.failure()),
@@ -112,22 +123,92 @@ async function run() {
   });
   await page.getByRole('link').filter({ hasText: 'Apartment 1204' }).click();
   await page.getByRole('heading', { name: 'No lease record yet' }).waitFor();
+  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
   await page
-    .getByLabel('Lease document')
+    .getByLabel('Lease document', { exact: true })
     .setInputFiles('test-data/leases/sample-lease.txt');
   await page.getByRole('button', { name: 'Extract & review lease' }).click();
   await page.getByRole('heading', { name: 'Extracted details' }).waitFor();
+  const rentRow = page
+    .locator('.lease-field-row')
+    .filter({ hasText: 'Monthly rent (QAR)' });
+  await rentRow.getByRole('button', { name: 'View source' }).click();
   await page
-    .locator('.field-card')
+    .locator('.lease-source-details:visible')
+    .getByText('sample-lease.txt', { exact: true })
     .first()
-    .getByText(/Source/)
-    .click();
+    .waitFor();
   assert(
     await page
-      .locator('.field-card')
-      .first()
+      .locator('.lease-source-details:visible')
       .getByText('sample-lease.txt', { exact: true })
+      .first()
       .isVisible(),
+  );
+  await page.getByRole('button', { name: 'View details for R1' }).click();
+  await page
+    .getByRole('heading', { name: 'Values used', exact: true })
+    .waitFor();
+  assert(
+    await page
+      .getByRole('heading', { name: 'Values used', exact: true })
+      .isVisible(),
+  );
+  for (const width of [1440, 1280, 1024, 768, 430, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    if (
+      (await rentRow
+        .getByRole('button', { name: 'View source' })
+        .getAttribute('aria-expanded')) === 'false'
+    )
+      await rentRow.getByRole('button', { name: 'View source' }).click();
+    await page.screenshot({
+      path: `test-results/lease-review-${width}.png`,
+      fullPage: true,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+      false,
+      `Lease workspace overflows at ${width}px`,
+    );
+    await rentRow.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByLabel('Current value — Monthly rent (QAR)').waitFor();
+    assert(
+      await page.getByLabel('Current value — Monthly rent (QAR)').isVisible(),
+    );
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const name of ['Parties', 'Lease period', 'Clauses', 'Signatures']) {
+    await page.getByRole('button', { name: new RegExp(`^${name} `) }).click();
+  }
+  const tenantRow = page.locator('.lease-field-row').filter({
+    has: page.getByRole('rowheader', { name: 'Tenant', exact: true }),
+  });
+  await tenantRow.getByRole('button', { name: 'Reject', exact: true }).click();
+  await tenantRow.locator('.lease-status.rejected').waitFor();
+  assert(
+    await tenantRow
+      .getByRole('button', { name: 'Reject', exact: true })
+      .isDisabled(),
+  );
+  const originalTenant = await tenantRow.locator('td').first().innerText();
+  await tenantRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page
+    .getByLabel('Current value — Tenant', { exact: true })
+    .fill('Owner verified tenant');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await tenantRow.getByText('Owner verified tenant').waitFor();
+  assert.equal(
+    await tenantRow.locator('td').first().innerText(),
+    originalTenant,
+  );
+  assert(
+    await tenantRow
+      .getByRole('button', { name: 'Accept', exact: true })
+      .isDisabled(),
   );
   await page.screenshot({
     path: 'test-results/lease-review-desktop.png',
@@ -135,12 +216,13 @@ async function run() {
   });
   // Serial owner decisions exercise the UI refresh and final occupancy transition.
   for (let i = 0; i < 16; i++) {
-    const card = page.locator('.field-card').nth(i);
-    await card.getByRole('button', { name: 'Accept', exact: true }).click();
-    await card.locator('.badge').filter({ hasText: 'accepted' }).waitFor();
+    const card = page.locator('.lease-field-row').nth(i);
+    const accept = card.getByRole('button', { name: 'Accept', exact: true });
+    if (!(await accept.isDisabled())) await accept.click();
+    await card.locator('.lease-status.accepted').waitFor();
   }
   await page
-    .locator('.notice')
+    .locator('.lease-review-notice')
     .getByText(/Owner confirmed/)
     .waitFor();
   assert(
@@ -149,7 +231,7 @@ async function run() {
       .getByText('occupied', { exact: true })
       .isVisible(),
   );
-  await page.getByRole('button', { name: /Condition & issues/ }).click();
+  await page.getByRole('tab', { name: /Condition & issues/ }).click();
   await page
     .getByLabel('Condition photos')
     .setInputFiles([
@@ -183,11 +265,80 @@ async function run() {
     'Mobile page overflows horizontally',
   );
   await page.reload();
-  await page.getByRole('button', { name: /Condition & issues/ }).click();
+  await page.getByRole('tab', { name: /Condition & issues/ }).click();
   await page
     .locator('.work-order .badge')
     .filter({ hasText: 'accepted' })
     .waitFor();
+  await page.getByRole('tab', { name: /Lease records/ }).click();
+  await page.getByRole('button', { name: 'Upload lease', exact: true }).click();
+  await page
+    .getByLabel('Lease document', { exact: true })
+    .setInputFiles('test-data/leases/problematic-lease.txt');
+  await page.getByRole('button', { name: 'Extract & review lease' }).click();
+  await page
+    .locator('.lease-record-summary')
+    .getByText('problematic-lease.txt', { exact: true })
+    .first()
+    .waitFor();
+  assert(
+    await page
+      .getByText(/This document does not identify this unit/)
+      .isVisible(),
+  );
+  const warningRecord = page.locator('.unit-lease-record').first();
+  const warningMessage = await warningRecord
+    .locator('.lease-warning')
+    .first()
+    .locator('.lease-warning-message strong')
+    .innerText();
+  const warning = warningRecord
+    .locator('.lease-warning')
+    .filter({ has: page.getByText(warningMessage, { exact: true }) });
+  await warning.getByRole('button', { name: /View warning source/ }).click();
+  await warning.getByRole('heading', { name: /Source/ }).waitFor();
+  assert(await warning.getByRole('heading', { name: /Source/ }).isVisible());
+  await warning
+    .getByRole('button', { name: 'Accept warning', exact: true })
+    .click();
+  await warning.locator('.lease-status.accepted').waitFor();
+  assert(
+    await warning
+      .getByRole('button', { name: 'Accept warning', exact: true })
+      .isDisabled(),
+  );
+  await warning
+    .getByRole('button', { name: 'Reject warning', exact: true })
+    .click();
+  await warning.locator('.lease-status.rejected').waitFor();
+  assert(
+    await warning
+      .getByRole('button', { name: 'Reject warning', exact: true })
+      .isDisabled(),
+  );
+  for (const width of [1440, 1280, 1024, 768, 430, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await warningRecord.screenshot({
+      path: `test-results/lease-warnings-${width}.png`,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+      false,
+      `Warning workspace overflows at ${width}px`,
+    );
+    assert(
+      await warning
+        .getByRole('button', { name: 'Accept warning', exact: true })
+        .isVisible(),
+    );
+    assert(
+      await warning
+        .getByRole('button', { name: 'Reject warning', exact: true })
+        .isVisible(),
+    );
+  }
   assert.deepEqual(errors, [], 'Browser runtime errors');
   console.log(
     'Browser E2E passed: upload, source, 16 owner reviews, occupancy, two photos, draft acceptance, persistence, desktop and mobile.',

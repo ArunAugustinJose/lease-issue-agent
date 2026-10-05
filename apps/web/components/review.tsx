@@ -1,13 +1,6 @@
 'use client';
 import { useState } from 'react';
-import {
-  Check,
-  X,
-  Pencil,
-  FileText,
-  ShieldCheck,
-  AlertTriangle,
-} from 'lucide-react';
+import { Check, X, Pencil, FileText } from 'lucide-react';
 import {
   labels,
   type Field,
@@ -18,15 +11,9 @@ import {
   type IssueView,
 } from '@marina/contracts';
 import { fileUrl, patch } from '../lib/api';
-export function Badge({ status }: { status: string }) {
-  return (
-    <span className={`badge ${status.toLowerCase()}`}>
-      {status === 'NOT_DETERMINABLE'
-        ? 'Could not determine'
-        : status.replaceAll('_', ' ').toLowerCase()}
-    </span>
-  );
-}
+import { Badge, displayValue } from './review-ui';
+export { Badge, displayValue } from './review-ui';
+import { LeaseRecord } from './lease/record';
 export function SourceEvidence({ sources }: { sources: Source[] }) {
   return (
     <details className="source">
@@ -50,8 +37,7 @@ export function SourceEvidence({ sources }: { sources: Source[] }) {
                 s.chunkId,
               ]
                 .filter(Boolean)
-                .join(' · ')}{' '}
-              · {Math.round(s.confidence * 100)}% confidence
+                .join(' · ')}
             </small>
             <p>“{s.excerpt}”</p>
           </blockquote>
@@ -59,24 +45,6 @@ export function SourceEvidence({ sources }: { sources: Source[] }) {
       )}
     </details>
   );
-}
-export function displayValue(key: Field['key'], value: Value): string {
-  if (value === null) return 'Could not determine';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (['rentAmount', 'monthlyRent', 'annualRent', 'deposit'].includes(key))
-    return `QAR ${new Intl.NumberFormat('en-QA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))}`;
-  if (
-    ['commencement', 'expiry'].includes(key) &&
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value)
-  )
-    return new Date(value + 'T00:00:00Z').toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
-  return String(value);
 }
 export function FieldCard({
   field,
@@ -128,16 +96,12 @@ export function FieldCard({
           </p>
         </div>
       </div>
-      <div className="confidence">
-        {Math.round(field.confidence * 100)}% extraction confidence · Agent
-        generated
-      </div>
       <SourceEvidence sources={field.sources} />
       {!locked && (
         <div className="actions">
           <button
             className="small primary"
-            disabled={busy}
+            disabled={busy || field.reviewStatus === 'ACCEPTED'}
             onClick={() => review('ACCEPTED')}
           >
             <Check size={14} />
@@ -156,7 +120,7 @@ export function FieldCard({
           </button>
           <button
             className="small danger"
-            disabled={busy}
+            disabled={busy || field.reviewStatus === 'REJECTED'}
             onClick={() => review('REJECTED')}
           >
             <X size={14} />
@@ -236,154 +200,7 @@ export function LeaseReview({
   lease: LeaseView;
   onChange: (lease: LeaseView) => void;
 }) {
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState('');
-  async function flagReview(id: string, status: ReviewStatus) {
-    setBusy(id);
-    setError('');
-    try {
-      onChange(
-        await patch<LeaseView>(`/leases/${lease.id}/flags/${id}`, { status }),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy('');
-    }
-  }
-  return (
-    <section className="lease-review">
-      <div className="section-heading">
-        <div className="heading-icon">
-          <FileText size={22} />
-        </div>
-        <div>
-          <h2>Lease record</h2>
-          <p>{lease.filename}</p>
-        </div>
-        <Badge status={lease.linked ? 'ACCEPTED' : 'PENDING'} />
-      </div>
-      <div className="notice">
-        <ShieldCheck size={19} />
-        <div>
-          <strong>
-            {lease.linked
-              ? 'Owner confirmed · Unit occupied'
-              : 'Needs review · Occupancy unchanged'}
-          </strong>
-          <p>
-            {lease.linked
-              ? 'All fields were accepted and all rules passed at confirmation. The lease is now locked.'
-              : 'Accept every field and review every warning. The unit becomes occupied only when all seven rules pass and the unit is still available.'}
-          </p>
-        </div>
-      </div>
-      <div className="meta-row">
-        <span>{lease.provider}</span>
-        <a href={fileUrl(lease.documentUrl)} target="_blank" rel="noreferrer">
-          Download source document ↗
-        </a>
-      </div>
-      <h3>
-        Extracted details{' '}
-        <span className="count">
-          {lease.fields.filter((f) => f.reviewStatus === 'ACCEPTED').length} /{' '}
-          {lease.fields.length} accepted
-        </span>
-      </h3>
-      <div className="fields-grid">
-        {lease.fields.map((field) => (
-          <FieldCard
-            key={field.id}
-            field={field}
-            locked={lease.linked}
-            onReview={async (f, status, value) =>
-              onChange(
-                await patch<LeaseView>(`/leases/${lease.id}/fields/${f.id}`, {
-                  status,
-                  ...(value !== undefined ? { value } : {}),
-                }),
-              )
-            }
-          />
-        ))}
-      </div>
-      <div className="subheading">
-        <ShieldCheck size={20} />
-        <h3>Owner acceptance standards</h3>
-      </div>
-      <div className="rule-list">
-        {lease.validations.map((rule) => (
-          <article className="rule" key={rule.ruleId}>
-            <div className="row">
-              <strong>
-                {rule.ruleId} · {rule.description}
-              </strong>
-              <Badge status={rule.status} />
-            </div>
-            <small>{rule.severity} severity</small>
-            <p>{rule.reason}</p>
-            <details>
-              <summary>Values used</summary>
-              <dl>
-                {Object.entries(rule.values).map(([key, v]) => (
-                  <div key={key}>
-                    <dt>{labels[key as Field['key']] ?? key}</dt>
-                    <dd>{displayValue(key as Field['key'], v ?? null)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-            <SourceEvidence sources={rule.sources} />
-          </article>
-        ))}
-      </div>
-      <div className="subheading">
-        <AlertTriangle size={20} />
-        <h3>
-          Needs attention <span className="count">{lease.flags.length}</span>
-        </h3>
-      </div>
-      {!lease.flags.length ? (
-        <div className="quiet-state">
-          No warnings found by the deterministic checks. Extracted values still
-          require your review.
-        </div>
-      ) : (
-        lease.flags.map((flag) => (
-          <article className="flag" key={flag.id}>
-            <div className="row">
-              <strong>{flag.message}</strong>
-              <Badge status={flag.reviewStatus} />
-            </div>
-            <small>{flag.severity} severity · Agent warning</small>
-            <SourceEvidence sources={flag.sources} />
-            <div className="actions">
-              <button
-                className="small"
-                disabled={busy === flag.id || lease.linked}
-                onClick={() => flagReview(flag.id, 'ACCEPTED')}
-              >
-                Accept warning
-              </button>
-              <button
-                className="small danger"
-                disabled={busy === flag.id || lease.linked}
-                onClick={() => flagReview(flag.id, 'REJECTED')}
-              >
-                Reject warning
-              </button>
-            </div>
-          </article>
-        ))
-      )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </section>
-  );
+  return <LeaseRecord lease={lease} onChange={onChange} />;
 }
 export function IssueCard({
   issue,

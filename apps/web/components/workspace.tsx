@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -21,6 +21,11 @@ import type {
 } from '@marina/contracts';
 import { api } from '../lib/api';
 import { Badge, LeaseReview, IssueCard } from './review';
+import {
+  UnitSummary,
+  UnitWorkspaceTabs,
+  UnitWorkspaceSkeleton,
+} from './unit-summary';
 function ErrorMessage({ message }: { message: string }) {
   return message ? (
     <p role="alert" className="error">
@@ -38,9 +43,16 @@ function Loading() {
 }
 export function LeaseUpload({
   onComplete,
+  onCancel,
 }: {
   onComplete: (lease: LeaseView) => void;
+  onCancel?: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const focusOnOpen = Boolean(onCancel);
+  useEffect(() => {
+    if (focusOnOpen) inputRef.current?.focus();
+  }, [focusOnOpen]);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -70,6 +82,7 @@ export function LeaseUpload({
         <span>PDF, DOCX or TXT · Maximum 10 MB</span>
         <input
           aria-label="Lease document"
+          ref={inputRef}
           type="file"
           accept=".pdf,.docx,.txt"
           disabled={busy}
@@ -82,7 +95,15 @@ export function LeaseUpload({
         <ArrowUpRight size={16} />
       </button>
       {busy && (
-        <p role="status">Reading source text and checking owner rules…</p>
+        <p role="status">
+          {onCancel && <span className="spinner" aria-hidden />}Reading source
+          text and checking owner rules…
+        </p>
+      )}
+      {onCancel && (
+        <button type="button" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
       )}
       <ErrorMessage message={error} />
     </form>
@@ -303,6 +324,7 @@ export function UnitWorkspace({ id }: { id: string }) {
   const [error, setError] = useState('');
   const [active, setActive] = useState<'lease' | 'issues'>('lease');
   const [uploaded, setUploaded] = useState<LeaseView | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const load = useCallback(async () => {
     try {
       setUnit(await api<UnitDetail>(`/units/${encodeURIComponent(id)}`));
@@ -326,147 +348,150 @@ export function UnitWorkspace({ id }: { id: string }) {
         <button onClick={load}>Try again</button>
       </section>
     );
-  if (!unit) return <Loading />;
+  if (!unit) return <UnitWorkspaceSkeleton />;
   const leases =
     uploaded && !unit.leases.some((l) => l.id === uploaded.id)
       ? [uploaded, ...unit.leases]
       : unit.leases;
   return (
-    <>
+    <div className="unit-workspace">
       <Link className="back" href="/">
-        <ArrowLeft size={16} />
+        <ArrowLeft size={16} aria-hidden />
         All units
       </Link>
-      <div className="unit-header">
-        <div>
-          <span className="eyebrow">
-            {unit.property} / {unit.building}
-          </span>
-          <h1>{unit.label}</h1>
-          <p className="external-id">{unit.id}</p>
-          <div className="unit-facts">
-            <span>{unit.type}</span>
-            <span>
-              <Ruler size={15} />
-              {unit.areaSqm} m²
-            </span>
-            <span>
-              <Car size={15} />
-              Parking {unit.parkingBay}
-            </span>
+      <UnitSummary
+        unit={unit}
+        showUpload={active === 'lease'}
+        uploadOpen={uploadOpen}
+        onUpload={() => setUploadOpen(true)}
+      />
+      <UnitWorkspaceTabs
+        active={active}
+        onChange={setActive}
+        leaseCount={leases.length}
+        issueCount={unit.issues.length}
+      />
+      <div
+        id="unit-panel-lease"
+        role="tabpanel"
+        aria-labelledby="unit-tab-lease"
+        hidden={active !== 'lease'}
+        tabIndex={0}
+      >
+        {uploadOpen && (
+          <section
+            className="lease-upload-panel"
+            id="unit-lease-upload"
+            aria-labelledby="upload-panel-title"
+          >
+            <h2 id="upload-panel-title">
+              <Upload size={20} aria-hidden />
+              Upload lease document
+            </h2>
+            <p>
+              Upload a lease to extract details and validate it against owner
+              standards.
+            </p>
+            <LeaseUpload
+              onCancel={() => setUploadOpen(false)}
+              onComplete={(lease) => {
+                updateLease(lease);
+                setUploadOpen(false);
+              }}
+            />
+          </section>
+        )}
+        {leases.length ? (
+          leases.map((lease) => (
+            <div className="unit-lease-record" key={lease.id}>
+              {lease.candidateUnitId !== unit.id &&
+                lease.unitId !== unit.id && (
+                  <div className="notice">
+                    <p>
+                      This document does not identify this unit. Review the
+                      extracted unit before linking.
+                    </p>
+                  </div>
+                )}
+              <LeaseReview lease={lease} onChange={updateLease} />
+            </div>
+          ))
+        ) : (
+          <div className="empty-state">
+            <FileText size={36} aria-hidden />
+            <h2>No lease record yet</h2>
+            <p>
+              Upload a lease document to extract and validate its details for
+              this unit.
+            </p>
+            <p className="muted">
+              Choose Upload lease in the unit summary to get started.
+            </p>
           </div>
-        </div>
-        <Badge status={unit.status} />
+        )}
       </div>
-      <div className="workspace-tabs" aria-label="Unit information">
-        <button
-          aria-pressed={active === 'lease'}
-          onClick={() => setActive('lease')}
-        >
-          <FileText size={18} />
-          Lease records <span>{unit.leases.length}</span>
-        </button>
-        <button
-          aria-pressed={active === 'issues'}
-          onClick={() => setActive('issues')}
-        >
-          <Camera size={18} />
-          Condition & issues <span>{unit.issues.length}</span>
-        </button>
-      </div>
-      <div className="workspace-layout">
-        <section
-          aria-label={
-            active === 'lease' ? 'Lease records' : 'Condition reports'
-          }
-        >
-          {active === 'lease' ? (
-            leases.length ? (
-              leases.map((lease) => (
-                <div className="panel" key={lease.id}>
-                  {lease.candidateUnitId !== unit.id &&
-                    lease.unitId !== unit.id && (
-                      <div className="notice">
-                        <p>
-                          This document does not identify this unit. Review the
-                          extracted unit before linking.
-                        </p>
-                      </div>
-                    )}
-                  <LeaseReview lease={lease} onChange={updateLease} />
-                </div>
+      <div
+        id="unit-panel-issues"
+        role="tabpanel"
+        aria-labelledby="unit-tab-issues"
+        hidden={active !== 'issues'}
+        tabIndex={0}
+      >
+        <div className="workspace-layout">
+          <section aria-label="Condition reports">
+            {unit.issues.length ? (
+              unit.issues.map((issue) => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  onChange={() => {
+                    void load();
+                  }}
+                />
               ))
             ) : (
               <div className="empty-state">
-                <FileText size={36} />
-                <h2>No lease record yet</h2>
+                <Camera size={36} />
+                <h2>A clear view starts here</h2>
                 <p>
-                  Upload a lease to extract its details, review source evidence
-                  and validate the owner rules.
+                  Report a condition with one or more photos. Findings and a
+                  draft work order will stay linked to this unit.
                 </p>
               </div>
-            )
-          ) : unit.issues.length ? (
-            unit.issues.map((issue) => (
-              <IssueCard
-                key={issue.id}
-                issue={issue}
-                onChange={() => {
-                  void load();
-                }}
-              />
-            ))
-          ) : (
-            <div className="empty-state">
-              <Camera size={36} />
-              <h2>A clear view starts here</h2>
-              <p>
-                Report a condition with one or more photos. Findings and a draft
-                work order will stay linked to this unit.
-              </p>
-            </div>
-          )}
-        </section>
-        <aside>
-          <div className="panel sticky">
-            <span className="eyebrow">
-              {active === 'lease'
-                ? 'Lease record agent'
-                : 'Property issue agent'}
-            </span>
-            <h2>{active === 'lease' ? 'Add a lease' : 'Report a condition'}</h2>
-            {active === 'lease' ? (
-              <LeaseUpload onComplete={updateLease} />
-            ) : (
+            )}
+          </section>
+          <aside>
+            <div className="panel sticky">
+              <span className="eyebrow">Property issue agent</span>
+              <h2>Report a condition</h2>
               <PhotoUpload
                 unitId={unit.id}
                 onComplete={() => {
                   void load();
                 }}
               />
-            )}
-          </div>
-          <div className="context-card">
-            <h3>Unit context</h3>
-            <p>
-              <FileText size={17} />
-              {unit.leases.length} lease records
-            </p>
-            <p>
-              <Camera size={17} />
-              {unit.issues.length} condition reports
-            </p>
-            <button
-              className="text-button"
-              onClick={() => setActive(active === 'lease' ? 'issues' : 'lease')}
-            >
-              View {active === 'lease' ? 'condition & issues' : 'lease records'}{' '}
-              →
-            </button>
-          </div>
-        </aside>
+            </div>
+            <div className="context-card">
+              <h3>Unit context</h3>
+              <p>
+                <FileText size={17} />
+                {unit.leases.length} lease records
+              </p>
+              <p>
+                <Camera size={17} />
+                {unit.issues.length} condition reports
+              </p>
+              <button
+                className="text-button"
+                onClick={() => setActive('lease')}
+              >
+                View lease records →
+              </button>
+            </div>
+          </aside>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 export function LeaseWorkspace({ id }: { id: string }) {
