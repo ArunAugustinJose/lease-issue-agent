@@ -1,0 +1,270 @@
+.landing-page {
+  position: relative;
+  isolation: isolate;
+  padding-bottom: 70px;
+}
+.landing-page .landing-art {
+  position: absolute;
+  left: -28px;
+  right: -28px;
+  z-index: -1;
+  pointer-events: none;
+}
+.landing-page .landing-art img {
+  object-fit: cover;
+}
+.landing-page .landing-art-top {
+  top: -40px;
+  height: clamp(340px, 33vw, 485px);
+}
+.landing-page .landing-art-top img {
+  object-position: top right;
+}
+.landing-page .landing-art-bottom {
+  bottom: -70px;
+  height: clamp(260px, 33vw, 485px);
+  opacity: 0.65;
+}
+.landing-page .landing-art-bottom img {
+  object-position: bottom right;
+}
+.landing-page .landing-hero {
+  min-height: 210px;
+  align-items: flex-start;
+  margin: 0;
+  padding-top: 18px;
+}
+.landing-page .landing-hero > div {
+  max-width: 590px;
+}
+.landing-page .landing-hero h1 {
+  font-size: 36px;
+}
+.landing-page .landing-hero p {
+  max-width: 490px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.landing-page .property-heading {
+  border: 0;
+  padding: 0;
+  margin-bottom: 26px;
+}
+.landing-page .property-heading h2 {
+  font-size: 21px;
+}
+.landing-page .property-heading p {
+  margin: 7px 0 0;
+}
+.landing-page .overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.6fr) minmax(300px, 1fr);
+  grid-template-areas: 'towers upload';
+  align-items: start;
+  gap: 30px;
+}
+.landing-page .landing-towers {
+  grid-area: towers;
+  min-width: 0;
+}
+.landing-page .building-group {
+  margin-top: 0;
+}
+.landing-page .building-group + .building-group {
+  margin-top: 26px;
+}
+.landing-page .building-group > .row {
+  align-items: center;
+}
+.landing-page .building-group > .row h3 {
+  font-size: 18px;
+}
+.landing-page .building-group > .row .muted {
+  font-size: 12px;
+}
+.landing-page .landing-tower-heading {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.landing-page .landing-tower-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.landing-page .landing-tower-heading h3 svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.landing-page .unit-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 12px 0 0;
+}
+.landing-page .unit-card {
+  background: white;
+  padding: 20px;
+  min-width: 0;
+  box-shadow: 0 2px 3px #203b3a03;
+}
+.landing-page .unit-symbol {
+  background: #edf2ea;
+  color: var(--accent);
+}
+.landing-page .unit-card h3 {
+  font-size: 20px;
+  margin-top: 14px;
+}
+.landing-page .unit-card .external-id {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.landing-page .unit-facts {
+  margin-top: 17px;
+  gap: 10px 16px;
+}
+.landing-page .unit-facts svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.landing-page .unit-bottom {
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 13px;
+}
+.landing-page .unit-bottom > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.landing-page .unit-bottom svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.landing-page .upload-aside {
+  grid-area: upload;
+  min-width: 0;
+  margin: 0;
+  padding: 24px;
+  background: white;
+  border-radius: 10px;
+}
+.landing-page .upload-aside h2 {
+  font-size: 23px;
+  line-height: 1.35;
+}
+.landing-page .upload-aside > p {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 11px 0 20px;
+}
+.landing-page .upload-form {
+  gap: 13px;
+}
+.landing-page .file-label {
+  padding: 24px 12px;
+  background: var(--paper);
+  border-color: #a9c7bc;
+}
+.landing-page .file-label > svg {
+  color: var(--accent);
+}
+.landing-page .file-label > strong {
+  font-size: 13px;
+}
+.landing-page .file-label > span {
+  font-size: 10px;
+}
+.landing-page .file-label input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 12px;
+  font-size: 11px;
+}
+.landing-page .upload-form > button {
+  width: 100%;
+  font-size: 12px;
+  padding: 11px 10px;
+}
+.landing-page .selected-file,
+.landing-page .upload-form [role='status'] {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1199px) {
+  .landing-page .overview-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'upload' 'towers';
+    gap: 28px;
+  }
+  .landing-page .upload-aside {
+    display: grid;
+    grid-template-rows: min-content min-content 1fr;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 28px;
+  }
+  .landing-page .upload-aside .upload-form {
+    margin-top: 0;
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+  .landing-page .landing-hero > div {
+    max-width: 55%;
+  }
+  .landing-page .landing-hero h1 {
+    font-size: 32px;
+  }
+}
+@media (max-width: 780px) {
+  .landing-page .landing-art {
+    left: -18px;
+    right: -18px;
+  }
+  .landing-page .landing-art-top {
+    top: -25px;
+  }
+}
+@media (max-width: 767px) {
+  .landing-page .landing-art-top {
+    height: 290px;
+    opacity: 0.3;
+  }
+  .landing-page .landing-art-top img {
+    object-position: top left;
+  }
+  .landing-page .landing-hero {
+    min-height: 0;
+    padding-top: 10px;
+    margin-bottom: 27px;
+  }
+  .landing-page .landing-hero > div {
+    max-width: 100%;
+  }
+  .landing-page .landing-hero h1 {
+    font-size: 30px;
+  }
+  .landing-page .landing-hero p {
+    font-size: 13px;
+  }
+  .landing-page .property-heading {
+    margin-bottom: 24px;
+  }
+  .landing-page .upload-aside {
+    display: block;
+    padding: 22px;
+  }
+  .landing-page .unit-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .landing-page .unit-card {
+    padding: 20px;
+  }
+  .landing-page .landing-art-bottom {
+    bottom: -45px;
+    height: 270px;
+    opacity: 0.5;
+  }
+}

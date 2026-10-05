@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -12,6 +13,8 @@ import {
   MapPin,
   Car,
   Ruler,
+  BedDouble,
+  ChevronRight,
 } from 'lucide-react';
 import type {
   UnitView,
@@ -23,6 +26,7 @@ import { api } from '../lib/api';
 import { ConditionIssuesTab } from './condition/tab';
 import './condition/styles.css';
 import './lease/tab.css';
+import './landing/styles.css';
 import { Badge, LeaseReview } from './review';
 import {
   UnitSummary,
@@ -144,8 +148,25 @@ export function Overview() {
     );
   if (!units) return <Loading />;
   return (
-    <>
-      <div className="page-heading">
+    <div className="landing-page">
+      <div className="landing-art landing-art-top" aria-hidden="true">
+        <Image
+          src="/images/landing/marina-top-bg.png"
+          alt=""
+          fill
+          sizes="(max-width: 1456px) 100vw, 1456px"
+          preload
+        />
+      </div>
+      <div className="landing-art landing-art-bottom" aria-hidden="true">
+        <Image
+          src="/images/landing/marina-bottom-waves.png"
+          alt=""
+          fill
+          sizes="(max-width: 1456px) 100vw, 1456px"
+        />
+      </div>
+      <div className="page-heading landing-hero">
         <div>
           <span className="eyebrow">Marina Crest Holdings W.L.L.</span>
           <h1>Your property, connected.</h1>
@@ -153,23 +174,26 @@ export function Overview() {
             Review lease records and reported conditions in one unit workspace.
           </p>
         </div>
-        <span className="portfolio-tag">
-          <Building2 size={18} /> {units.length} units · 2 towers
-        </span>
+      </div>
+      <div className="property-heading">
+        <h2>Marina Crest Residences</h2>
+        <p>
+          <MapPin size={15} aria-hidden />
+          Lusail Marina District, Doha
+        </p>
       </div>
       <div className="overview-layout">
-        <section>
-          <div className="property-heading">
-            <h2>Marina Crest Residences</h2>
-            <p>
-              <MapPin size={15} />
-              Lusail Marina District, Doha
-            </p>
-          </div>
+        <section
+          className="landing-towers"
+          aria-label="Property towers and units"
+        >
           {[...new Set(units.map((u) => u.building))].map((building) => (
             <section className="building-group" key={building}>
-              <div className="row">
-                <h3>{building}</h3>
+              <div className="row landing-tower-heading">
+                <h3>
+                  <Building2 size={18} aria-hidden />
+                  {building}
+                </h3>
                 <span className="muted">
                   {units.filter((u) => u.building === building).length} units
                 </span>
@@ -185,28 +209,35 @@ export function Overview() {
                     >
                       <div className="row">
                         <span className="unit-symbol">
-                          <Building2 size={20} />
+                          <Building2 size={20} aria-hidden />
                         </span>
                         <Badge status={u.status} />
                       </div>
                       <h3>{u.label}</h3>
                       <p className="external-id">{u.id}</p>
                       <div className="unit-facts">
-                        <span>{u.type}</span>
                         <span>
-                          <Ruler size={14} />
+                          <BedDouble size={14} aria-hidden />
+                          {u.type}
+                        </span>
+                        <span>
+                          <Ruler size={14} aria-hidden />
                           {u.areaSqm} m²
                         </span>
                         <span>
-                          <Car size={14} />
+                          <Car size={14} aria-hidden />
                           {u.parkingBay}
                         </span>
                       </div>
                       <div className="unit-bottom">
                         <span>
-                          {u.leaseCount} lease records · {u.issueCount} issues
+                          <FileText size={14} aria-hidden />
+                          {u.leaseCount} lease{' '}
+                          {u.leaseCount === 1 ? 'record' : 'records'} ·{' '}
+                          {u.issueCount}{' '}
+                          {u.issueCount === 1 ? 'issue' : 'issues'}
                         </span>
-                        <ArrowUpRight size={18} />
+                        <ChevronRight size={18} aria-hidden />
                       </div>
                     </Link>
                   ))}
@@ -224,16 +255,9 @@ export function Overview() {
           <LeaseUpload
             onComplete={(lease) => router.push(`/leases/${lease.id}`)}
           />
-          <div className="aside-note">
-            <FileText size={18} />
-            <p>
-              Agent output starts pending. You remain in control of every field
-              and warning.
-            </p>
-          </div>
         </aside>
       </div>
-    </>
+    </div>
   );
 }
 export function PhotoUpload({

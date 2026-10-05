@@ -117,6 +117,48 @@ async function run() {
   }
   assert.equal(await page.locator('.unit-card').count(), 5);
   await mkdir('test-results', { recursive: true });
+  for (const width of [1440, 1280, 1024, 768, 430, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.locator('.landing-art-top img').evaluate(async (image) => {
+      await (image as HTMLImageElement).decode();
+    });
+    await page.screenshot({
+      path: `test-results/landing-${width}.png`,
+      fullPage: true,
+    });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+      false,
+      `Landing page overflows at ${width}px`,
+    );
+    assert.equal(await page.locator('.unit-card img').count(), 0);
+    assert.equal(
+      await page.locator('.unit-card .unit-symbol .lucide-building2').count(),
+      5,
+    );
+    assert.equal(await page.locator('.portfolio-tag, .aside-note').count(), 0);
+    assert(
+      await page.getByLabel('Lease document', { exact: true }).isVisible(),
+    );
+    const columns = await page
+      .locator('.unit-grid')
+      .first()
+      .evaluate(
+        (grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+      );
+    assert.equal(columns, width < 768 ? 1 : 2);
+    if (width < 1200) {
+      const upload = await page.locator('.upload-aside').boundingBox();
+      const towers = await page.locator('.landing-towers').boundingBox();
+      assert(
+        upload && towers && upload.y < towers.y,
+        'Upload should precede towers on mobile/tablet',
+      );
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: 'test-results/overview-desktop.png',
     fullPage: true,
@@ -445,9 +487,31 @@ async function run() {
         .isVisible(),
     );
   }
+  await page.goto('http://localhost:3001');
+  await page
+    .getByRole('heading', { name: 'Your property, connected.' })
+    .waitFor();
+  await page.getByLabel('Lease document', { exact: true }).setInputFiles({
+    name: 'unsupported.exe',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('invalid'),
+  });
+  await page
+    .getByRole('button', { name: 'Extract & review lease', exact: true })
+    .click();
+  await page.getByRole('alert').waitFor();
+  assert(await page.getByLabel('Lease document', { exact: true }).isVisible());
+  await page
+    .getByLabel('Lease document', { exact: true })
+    .setInputFiles('test-data/leases/problematic-lease.txt');
+  await page
+    .getByRole('button', { name: 'Extract & review lease', exact: true })
+    .click();
+  await page.waitForURL(/\/leases\//);
+  await page.getByRole('heading', { name: 'Extracted details' }).waitFor();
   assert.deepEqual(errors, [], 'Browser runtime errors');
   console.log(
-    'Browser E2E passed: inline lease upload, sources, owner reviews, occupancy, single/multiple photos, draft accept/reject, context, persistence and six viewport sizes.',
+    'Browser E2E passed: landing layout, navigation, upload validation/retry, lease reviews, sources, occupancy, condition reports and six viewport sizes.',
   );
 }
 run()
