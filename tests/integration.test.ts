@@ -14,6 +14,9 @@ import type {
   UnitView,
 } from '@marina/contracts';
 import { createApp } from '../apps/api/src/app';
+import { docx, paragraph, table } from './docx-fixture';
+import { LeaseDocumentAgent } from '../apps/api/src/agents';
+import { vi } from 'vitest';
 const enabled = process.env.RUN_DB_TESTS === '1';
 describe.skipIf(!enabled)(
   'PostgreSQL API integration and critical E2E flow',
@@ -207,6 +210,141 @@ describe.skipIf(!enabled)(
           .status,
       ).toBe('OCCUPIED');
       expect(after.linked).toBe(false);
+    });
+    it('identifies table leases, persists cell evidence and respects actual availability', async () => {
+      for (const [unitId, expected] of [
+        ['MC-B-0902', 'PASS'],
+        ['MC-A-0302', 'FAIL'],
+      ]) {
+        const response = await request(app.getHttpServer())
+          .post('/api/leases')
+          .attach(
+            'file',
+            await docx(
+              table([
+                ['Property', 'Marina Crest Residences'],
+                ['Building', unitId.includes('-B-') ? 'Tower B' : 'Tower A'],
+                ['Unit ID', `${unitId} / Apartment ${unitId.slice(-4)}`],
+              ]),
+            ),
+            {
+              filename: 'table-lease.docx',
+              contentType:
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            },
+          )
+          .expect(201);
+        const lease = response.body as LeaseView;
+        expect(lease.candidateUnitId).toBe(unitId);
+        expect(lease.linked).toBe(false);
+        expect(lease.validations.find((r) => r.ruleId === 'R7')?.status).toBe(
+          expected,
+        );
+        const field = lease.fields.find((f) => f.key === 'unit')!;
+        expect(field.originalValue).toBe(unitId);
+        expect(field.reviewStatus).toBe('PENDING');
+        expect(field.sources[0]).toMatchObject({
+          filename: 'table-lease.docx',
+          chunkId: expect.stringContaining('table-'),
+          excerpt: expect.stringContaining(unitId),
+        });
+        const reload = await request(app.getHttpServer())
+          .get(`/api/leases/${lease.id}`)
+          .expect(200);
+        expect(
+          (reload.body as LeaseView).fields.find((f) => f.key === 'unit')
+            ?.sources,
+        ).toEqual(field.sources);
+      }
+    });
+    it('keeps evidence-only candidates without rewriting extraction or changing occupancy', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/leases')
+        .attach('file', await docx(table([['Reference', 'MC-B-0902']])), {
+          filename: 'reference.docx',
+          contentType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        })
+        .expect(201);
+      let lease = response.body as LeaseView;
+      expect(lease.candidateUnitId).toBe('MC-B-0902');
+      expect(
+        lease.fields.find((f) => f.key === 'unit')?.originalValue,
+      ).toBeNull();
+      expect(
+        lease.fields.find((f) => f.key === 'unit')?.sources[0].excerpt,
+      ).toContain('MC-B-0902');
+      expect(lease.validations.find((r) => r.ruleId === 'R7')?.status).toBe(
+        'NOT_DETERMINABLE',
+      );
+      const landlord = lease.fields.find((f) => f.key === 'landlord')!;
+      lease = (
+        await request(app.getHttpServer())
+          .patch(`/api/leases/${lease.id}/fields/${landlord.id}`)
+          .send({ status: 'REJECTED' })
+          .expect(200)
+      ).body as LeaseView;
+      expect(lease.candidateUnitId).toBe('MC-B-0902');
+      expect(lease.linked).toBe(false);
+      expect(
+        (await request(app.getHttpServer()).get('/api/units/MC-B-0902')).body
+          .status,
+      ).toBe('AVAILABLE');
+    });
+    it('does not choose among multiple known IDs or trust an unsupported agent ID', async () => {
+      const ambiguous = (
+        await request(app.getHttpServer())
+          .post('/api/leases')
+          .attach(
+            'file',
+            await docx(
+              paragraph('Unit: MC-B-0902') +
+                paragraph('Previous unit reference: MC-A-0301'),
+            ),
+            {
+              filename: 'ambiguous.docx',
+              contentType:
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            },
+          )
+          .expect(201)
+      ).body as LeaseView;
+      expect(ambiguous.candidateUnitId).toBeNull();
+      expect(
+        ambiguous.flags.some((f) => f.message.includes('More than one unit')),
+      ).toBe(true);
+      expect(
+        ambiguous.validations.find((r) => r.ruleId === 'R7')?.status,
+      ).not.toBe('PASS');
+      const agent = app.get(LeaseDocumentAgent);
+      const originalRun = agent.run.bind(agent);
+      const spy = vi
+        .spyOn(agent, 'run')
+        .mockImplementationOnce(async (filename, chunks) => {
+          const output = await originalRun(filename, chunks);
+          output.fields.find((f) => f.key === 'unit')!.value = 'MC-A-0301';
+          return output;
+        });
+      try {
+        const lease = (
+          await request(app.getHttpServer())
+            .post('/api/leases')
+            .attach('file', Buffer.from('Unit: MC-B-0902'), {
+              filename: 'unsupported-extraction.txt',
+              contentType: 'text/plain',
+            })
+            .expect(201)
+        ).body as LeaseView;
+        expect(lease.candidateUnitId).toBe('MC-B-0902');
+        expect(lease.fields.find((f) => f.key === 'unit')?.originalValue).toBe(
+          'MC-A-0301',
+        );
+        expect(lease.validations.find((r) => r.ruleId === 'R7')?.status).toBe(
+          'FAIL',
+        );
+      } finally {
+        spy.mockRestore();
+      }
     });
     it('rejects bad uploads and invalid DTOs without partial persistence', async () => {
       await request(app.getHttpServer())

@@ -22,6 +22,7 @@ import {
 import { validateFile, storeFiles, removeFiles } from './storage';
 import { parseDocument } from './parsers';
 import { mayConfirmLease } from './occupancy';
+import { matchLeaseUnit } from './unit-matching';
 @Injectable()
 export class LeasesService {
   constructor(
@@ -48,11 +49,13 @@ export class LeasesService {
     await storeFiles([stored]);
     try {
       const id = await this.db.$transaction(async (tx) => {
-        const unitValue = output.fields.find((f) => f.key === 'unit')?.value;
+        const knownUnits = await tx.unit.findMany({
+          include: { building: { include: { property: true } } },
+        });
+        const match = matchLeaseUnit(stored.filename, chunks, knownUnits);
         const unit =
-          typeof unitValue === 'string'
-            ? await tx.unit.findUnique({ where: { id: unitValue } })
-            : null;
+          knownUnits.find((u) => u.id === match.matchedUnitId) ?? null;
+        // Evidence can identify a candidate even when extraction is missing. Never rewrite AI values.
         const lease = await tx.lease.create({
           data: {
             candidateUnitId: unit?.id,
@@ -83,7 +86,19 @@ export class LeasesService {
               currency: monetary.has(f.key) ? 'QAR' : null,
             },
           });
-          for (const s of f.sources)
+          const sources =
+            f.key === 'unit'
+              ? [
+                  ...f.sources,
+                  ...match.sources.filter(
+                    (s) =>
+                      !f.sources.some(
+                        (original) => original.chunkId === s.chunkId,
+                      ),
+                  ),
+                ]
+              : f.sources;
+          for (const s of sources)
             await tx.leaseSourceReference.create({
               data: { ...s, fieldId: field.id, documentId: document.id },
             });
@@ -93,7 +108,26 @@ export class LeasesService {
           include: leaseInclude,
         });
         const fields = leaseDto(loaded).fields;
-        const results = this.rules.validate({ fields, unit });
+        if (match.status !== 'MATCHED')
+          await tx.leaseFlag.create({
+            data: {
+              leaseId: lease.id,
+              severity: 'high',
+              message: match.reason,
+              sources: {
+                connect: fields
+                  .find((f) => f.key === 'unit')!
+                  .sources.map((s) => ({ id: s.id! })),
+              },
+            },
+          });
+        const extractedUnit = fields.find(
+          (f) => f.key === 'unit',
+        )?.currentValue;
+        const results = this.rules.validate({
+          fields,
+          unit: extractedUnit === unit?.id ? unit : null,
+        });
         await this.saveRules(tx, lease.id, results);
         for (const f of fields) {
           if (f.currentValue === null || !f.sources.length)
@@ -184,14 +218,24 @@ export class LeasesService {
     });
     const fields = leaseDto(lease).fields;
     const unitValue = fields.find((f) => f.key === 'unit');
+    const evidenceValidated =
+      lease.linked ||
+      unitValue?.overridden ||
+      unitValue?.currentValue === lease.candidateUnitId;
     const unit =
-      typeof unitValue?.currentValue === 'string'
+      evidenceValidated && typeof unitValue?.currentValue === 'string'
         ? await tx.unit.findUnique({ where: { id: unitValue.currentValue } })
         : null;
     if (!lease.linked)
       await tx.lease.update({
         where: { id: leaseId },
-        data: { candidateUnitId: unit?.id ?? null },
+        data: {
+          candidateUnitId:
+            unit?.id ??
+            (!unitValue?.overridden && unitValue?.reviewStatus !== 'REJECTED'
+              ? lease.candidateUnitId
+              : null),
+        },
       });
     const results = this.rules.validate({
       fields: fields.map((f) => ({

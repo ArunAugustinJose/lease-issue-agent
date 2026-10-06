@@ -9,6 +9,7 @@ import {
 } from '@marina/contracts';
 import type { Chunk } from './parsers';
 import Decimal from 'decimal.js';
+import { normalizeMatchingText } from './unit-matching';
 export interface LeaseModelProvider {
   extract(context: {
     filename: string;
@@ -39,6 +40,14 @@ const monetary = new Set<FieldKey>([
   'annualRent',
   'deposit',
 ]);
+function fieldLabel(text: string, aliases: string[]): string | undefined {
+  const normalized = normalizeMatchingText(text);
+  return aliases.find(
+    (label) =>
+      normalized === normalizeMatchingText(label) ||
+      new RegExp(`^${normalizeMatchingText(label)}\\s*:`).test(normalized),
+  );
+}
 export class StubLeaseModelProvider implements LeaseModelProvider {
   async extract({
     filename,
@@ -49,15 +58,30 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
   }): Promise<Extraction[]> {
     const fields: Extraction[] = fieldKeys.map((key) => {
       const annualOnly =
-        !chunks.some((c) => c.text.startsWith('Monthly Rent:')) &&
-        chunks.some((c) => c.text.startsWith('Annual Rent:'));
+        !chunks.some((c) => fieldLabel(c.text, ['Monthly Rent'])) &&
+        chunks.some((c) => fieldLabel(c.text, ['Annual Rent']));
       const header =
         annualOnly && ['rentAmount', 'rentFrequency'].includes(key)
           ? 'Annual Rent:'
           : headers[key];
+      const aliases =
+        key === 'unit'
+          ? [
+              'Unit',
+              'Unit ID',
+              'Unit Number',
+              'Apartment',
+              'Apartment No',
+              'Premises',
+            ]
+          : [header.slice(0, -1)];
       const hits = chunks
-        .map((c, i) => ({ c, i }))
-        .filter(({ c }) => c.text.startsWith(header));
+        .map((c, i) => ({
+          c,
+          i,
+          label: fieldLabel(c.text, aliases),
+        }))
+        .filter(({ label }) => label !== undefined);
       if (hits.length !== 1)
         return {
           key,
@@ -71,12 +95,31 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
             confidence: 0,
           })),
         };
-      const { c, i } = hits[0];
+      const { c, i, label } = hits[0];
       let source = c;
-      let raw = c.text.slice(header.length).trim();
+      let raw = c.text
+        .replace(
+          new RegExp(`^\\s*${label!.replace(/ /g, '\\s+')}\\s*:?\\s*`, 'i'),
+          '',
+        )
+        .trim();
       if (!raw) {
-        source = chunks[i + 1] ?? c;
-        raw = source.text;
+        const next = chunks[i + 1];
+        // A label in a table may only consume its own next cell, never the next row/table.
+        const row = c.id.match(/^(.*table-\d+-row-\d+)-col-(\d+)-/);
+        const nextRow = next?.id.match(/^(.*table-\d+-row-\d+)-col-(\d+)-/);
+        if (
+          next &&
+          (!row ||
+            (nextRow &&
+              row[1] === nextRow[1] &&
+              [Number(row[2]), Number(row[2]) + 1].includes(
+                Number(nextRow[2]),
+              )))
+        ) {
+          source = next;
+          raw = source.text;
+        }
       }
       if (key === 'landlordSigned' || key === 'tenantSigned') {
         source =
@@ -86,7 +129,11 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
       let value: Value = raw;
       if (key === 'unit') {
         const identifiers = [
-          ...new Set(raw.match(/\b[A-Z]{2,10}-[A-Z0-9]{1,10}-\d{4}\b/g) ?? []),
+          ...new Set(
+            normalizeMatchingText(raw)
+              .toUpperCase()
+              .match(/\b[A-Z]{2,10}-[A-Z0-9]{1,10}-\d{4}\b/g) ?? [],
+          ),
         ];
         value = identifiers.length === 1 ? identifiers[0] : null;
       }
@@ -95,7 +142,7 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
           raw.match(/QAR\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1].replaceAll(',', '') ??
           null;
       if (key === 'rentFrequency')
-        value = /QAR\s*[\d,]+/.test(raw)
+        value = /QAR\s*[\d,]+/i.test(raw)
           ? annualOnly
             ? 'ANNUAL'
             : 'MONTHLY'
@@ -140,7 +187,10 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
                   filename,
                   chunkId: source.id,
                   ...source.locator,
-                  excerpt: `${header} ${source.text}`.slice(0, 600),
+                  excerpt: (source === c
+                    ? c.text
+                    : `${c.text}\n${source.text}`
+                  ).slice(0, 600),
                   confidence,
                 },
               ],
@@ -152,7 +202,7 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
     if (
       monthly.value !== null &&
       annual.value === null &&
-      !chunks.some((c) => c.text.startsWith('Annual Rent:'))
+      !chunks.some((c) => fieldLabel(c.text, ['Annual Rent']))
     ) {
       const derived = new Decimal(String(monthly.value)).mul(12);
       if (derived.lte('9999999999999999.99')) {
@@ -167,7 +217,7 @@ export class StubLeaseModelProvider implements LeaseModelProvider {
     if (
       annual.value !== null &&
       monthly.value === null &&
-      !chunks.some((c) => c.text.startsWith('Monthly Rent:'))
+      !chunks.some((c) => fieldLabel(c.text, ['Monthly Rent']))
     ) {
       const derived = new Decimal(String(annual.value)).div(12);
       if (derived.decimalPlaces() <= 2) {
