@@ -99,7 +99,9 @@ flowchart TD
   Lease --> Parser[PDF / DOCX / TXT parser]
   Parser --> LA[LeaseDocumentAgent]
   LA --> LP[LeaseModelProvider / deterministic stub]
-  LP --> Rules[Typed R1–R7 rules engine]
+  LP --> Match[Evidence-backed unit matching]
+  Parser --> Match
+  Match --> Rules[Typed R1–R7 rules engine]
   Rules --> Review[Owner field / warning review]
   Review --> Link[Conservative lease confirmation]
   Issue --> Storage[Image validation + local storage]
@@ -145,17 +147,25 @@ Foreign keys protect references. Unit/status and lease/review lookups are indexe
 ## Lease workflow and provenance
 
 1. Validate extension, submitted MIME, file size and basic content signatures.
-2. Parse through `DocumentParser`: PDF pages/lines, DOCX paragraphs, UTF-8 TXT lines. DOCX/TXT have **no invented page numbers**. Scanned or empty PDFs return a readable parser error.
-3. Construct normalized source chunks and invoke `LeaseDocumentAgent → LeaseModelProvider.extract`.
+2. Parse through `DocumentParser`: PDF text is extracted page by page and split into lines; UTF-8 TXT is split into lines. DOCX parsing walks paragraphs and table cells, including nested tables and multiple paragraphs within a cell. DOCX/TXT have **no invented page numbers**. Scanned or empty PDFs return a readable parser error; OCR is not implemented.
+3. Preserve original chunk text and invoke `LeaseDocumentAgent → LeaseModelProvider.extract`. Heading recognition and unit matching normalize case, whitespace (including non-breaking spaces) and Unicode dashes without changing the stored evidence.
 4. Normalize values, retain source excerpts/confidence and derive missing monthly/annual rent only from a valid corresponding figure. Derivations keep their input source and formula; conflicting stated figures are not overwritten.
-5. Match only an unambiguous explicit unit ID. Duplicate or ambiguous unit clauses remain unknown; display labels alone never cause fuzzy matching.
+5. Independently match document evidence against known units: prefer exact external IDs; otherwise use exact normalized labels and any recognized property/building context. Only a unique result becomes a candidate. Multiple distinct IDs or unresolved labels require human review; unknown or partial IDs do not receive a fuzzy match.
 6. Evaluate seven typed rule validators, detect missing information, failed/unknown rules, ambiguous clauses and suspicious zero figures.
 7. Store document, fields, sources, validations, warnings and candidate relation in one database transaction. Generated storage names never use the client filename as a path. Failed persistence removes newly stored files.
 8. Return pending human review. Rejected fields are treated as unknown by subsequent rule evaluations.
 
-The stub recognizes the supplied clause headings and text structure, rather than pretending to understand every legal document. Unrecognized valid documents return unknown fields and review flags. Supported but malformed files return controlled validation/parser errors instead of crashing the application.
+Lease formatting varies: a unit or rent value may share a paragraph with its heading, occupy the next paragraph, or sit in a separate table cell. Extraction therefore cannot rely on ordinary paragraphs alone. The stub supports unit headings such as Unit ID, Unit Number, Apartment No and Premises; table label/value lookup stays within the same row to avoid consuming an unrelated value. Its heading-based interpretation remains limited. Unrecognized valid documents return unknown fields and review flags. Supported but malformed files return controlled validation/parser errors instead of crashing the application.
 
-Every determined field has filename, chunk identifier, excerpt, confidence and available page/paragraph/line location. Unknown fields have no manufactured source and produce a review flag. Human overrides retain original source evidence; that evidence attests to the original document value, not the owner's correction. The UI marks corrections as **Owner override**.
+Source references retain the filename, chunk identifier, original excerpt, confidence and available page/paragraph/line location. Table chunk IDs encode table, row, column and paragraph, rather than inventing page locations. Matching evidence is saved alongside unit extraction sources, including the contributing chunks when a label spans lines. Missing fields produce review flags; an unknown extracted unit can still retain genuine evidence for a candidate. Human overrides retain original source evidence; that evidence attests to the original document value, not the owner's correction. The UI marks corrections as **Owner override**.
+
+Matching does not rewrite the provider's extracted unit value or approve it. A candidate supported by document evidence may exist while the unit field remains unknown. R7 cannot pass from that candidate alone or from an unsupported provider ID; the owner must resolve the field through review. Ambiguous/unmatched uploads remain available at their lease review URL, with a warning and no automatic unit link or occupancy change.
+
+### Engineering note: Apartment 0902
+
+The reported Apartment 0902 (`MC-B-0902`) issue exposed a formatting assumption: the unit information appeared in a DOCX table, rather than an ordinary paragraph. The parser now retains table structure in chunk IDs, the stub can read adjacent label/value cells, and the matcher checks the complete parsed evidence against known units. This addresses that layout without depending on one fixed unit heading or silently replacing the extracted value.
+
+Generated DOCX regression fixtures recreate this case. Database integration tests verify the candidate, persisted table evidence and unchanged occupancy after upload, alongside occupied-unit, ambiguous-ID and unsupported-provider-ID cases. This coverage does not imply that every lease layout is understood by the stub.
 
 ## Deterministic rules and occupancy
 
@@ -221,9 +231,9 @@ npm run test:integration
 npm run test:e2e
 ```
 
-- `npm test`: focused R1–R7, date/money/occupancy guards, conservative unit extraction, provider honesty, safe file handling and accessible field/draft rendering. DB tests are explicitly skipped in this credential-free command.
-- `test:integration`: real Nest HTTP requests through Supertest, Prisma and PostgreSQL. Creates a fresh process-specific schema, deploys committed migrations, seeds supplied data, exercises upload/review/override/warnings/drafts/occupancy and error cases, then removes **only that schema** and its temporary uploads. It does not reset application data.
-- `test:e2e`: requires `npm run build` first. Starts the production frontend on **3001**, test API on **4000**, and its own fresh database schema. Clicks through upload, source inspection, all field acceptances, occupancy, multi-photo issue, draft acceptance and reload persistence in headless Chrome. Checks mobile width and browser runtime errors; screenshots go in ignored `test-results/`. Stop your project API first to free port 4000.
+- `npm test`: focused R1–R7, date/money/occupancy guards, DOCX paragraph/table parsing (including nested tables), normalized headings and unit matching, ambiguity handling, provider honesty, safe file handling and accessible field/draft rendering. PDF page/line provenance uses mocked text-extraction output; this is not OCR coverage. DB tests are explicitly skipped in this credential-free command.
+- `test:integration`: real Nest HTTP requests through Supertest, Prisma and PostgreSQL. Creates a fresh process-specific schema, deploys committed migrations, seeds supplied data, exercises upload/review/override/warnings/drafts/occupancy and error cases, plus DOCX table evidence persistence, available/occupied unit checks, ambiguous matches and missing or unsupported extracted unit values, then removes **only that schema** and its temporary uploads. It does not reset application data.
+- `test:e2e`: requires `npm run build` first. Starts the production frontend on **3001**, test API on **4001**, and its own fresh database schema. Clicks through upload, source inspection, all field acceptances, occupancy, multi-photo issue, draft acceptance and reload persistence in headless Chrome. Checks mobile width and browser runtime errors; screenshots go in ignored `test-results/`. Keep ports 3001 and 4001 free for this test.
 - Browser E2E uses installed Chrome/Edge on Windows, `PLAYWRIGHT_CHROMIUM_EXECUTABLE` if supplied, or Playwright Chromium. On other platforms, run `npx playwright install chromium` before browser tests.
 - `npm run db:generate`: Prisma client generation; `npx prisma validate`: schema validation.
 - `npm run format`: Prettier formatting. ESLint rejects unsafe `any` and unused code. Both apps and shared contracts compile strictly.
@@ -234,7 +244,7 @@ Dependencies are locked. Patched transitive overrides for Prisma's CLI configura
 
 ## Connecting a real model provider
 
-Implement **`LeaseModelProvider.extract({filename, chunks})`** in `apps/api/src/agents.ts`: submit normalized text/source chunk IDs and require the same 16-field `Extraction[]` contract, typed scalar values, source IDs/excerpts and calibrated confidence. Validate provider responses, reject missing/fabricated chunk IDs and normalize dates/QAR amounts before domain persistence. A production integration must treat document text as untrusted data, not model instructions.
+Implement **`LeaseModelProvider.extract({filename, chunks})`** in `apps/api/src/agents.ts`: submit parsed text/source chunk IDs and require the same 16-field `Extraction[]` contract, typed scalar values, source IDs/excerpts and calibrated confidence. Validate provider responses, reject missing/fabricated chunk IDs and normalize dates/QAR amounts before domain persistence. A production integration must treat document text as untrusted data, not model instructions.
 
 Implement **`VisionModelProvider.assess({unitId, photos})`**: submit decoded image content to a multimodal model and return the existing `VisionOutput` contract. Findings/drafts must cite only supplied photo IDs; use uncertainty for non-visible facts. Validate output structure, limit latency/cost, and handle provider failure without partial persistence.
 
@@ -269,7 +279,7 @@ The assessment deliberately covers two core workflows: lease review and conditio
 - **Connect a real multimodal provider.** Implement the existing lease and vision provider interfaces without rewriting the domain workflows. Stub mode would stay available for automated tests, local development and demos without credentials. I would validate returned values and evidence IDs before persistence, while keeping deterministic rule checks and human approval separate from model reasoning.
 - **Add OCR and document preprocessing.** The current parser works with text-readable files and rejects scanned or empty PDFs. I would start with scanned PDFs, photographed documents and image-based leases, retaining page locations so OCR output can still be checked against the original.
 - **Highlight source evidence.** Build on the existing excerpts and page, paragraph or line references. Opening a monthly-rent source should show the corresponding passage highlighted in the document, rather than requiring the owner to find it manually.
-- **Detect contradictions more clearly.** Extend the existing ambiguity and rent-reconciliation checks to conflicting rent clauses, dates, unit IDs, renewal terms and signature statements. Model findings would remain review suggestions; arithmetic, date and occupancy checks would stay in application code.
+- **Detect contradictions more clearly.** Build on the implemented detection of multiple known unit IDs and rent reconciliation, adding checks for conflicting rent clauses, dates, renewal terms and signature statements. Model findings would remain review suggestions; arithmetic, date and occupancy checks would stay in application code.
 
 ### Days 8–14 — Make owner review faster
 
