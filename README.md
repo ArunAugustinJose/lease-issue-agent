@@ -8,7 +8,7 @@ This is a runnable coding-assessment implementation with deliberate production l
 
 - Browse the supplied property grouped by Tower A / Tower B, with the five exact unit IDs, occupancy, type, area, parking, and lease/issue counts.
 - Open a unit workspace containing its candidate/confirmed lease records and condition reports.
-- Upload PDF, DOCX or TXT leases; inspect 16 extracted fields, their confidence and source locations; accept, reject or correct each field independently.
+- Upload PDF, DOCX or TXT leases; inspect 16 extracted fields and their source locations; accept, reject or correct each field independently.
 - Inspect all seven owner-rule results, the values used, and their supporting document sources.
 - Accept or reject every warning independently. “Accept warning” acknowledges the warning; rejecting a warning does not override a failed rule.
 - Upload one to eight images to a selected unit, preview them, inspect condition/assets/damage and accept or reject the generated draft work order.
@@ -252,6 +252,50 @@ Register these implementations in `AgentsModule` behind `MODEL_PROVIDER`. The hy
 - The stub's field confidence is a deterministic demonstration score, not an empirically calibrated model probability. Heading-based interpretation is intentionally limited. R2 recognizes a small set of explicit mechanisms; unusual legal mechanisms need a richer real provider contract and typed validator support.
 - Warnings and review timestamps preserve original output/current decision, not every successive review event. Confirmed leases lock fields. Unknown/unmatched leases need their returned review URL; no extra generic document-library screen was added.
 
+## Relevant Real-Estate Experience
+
+I previously worked on a production real-estate engagement for Aldar Properties using Next.js, NestJS, Sitecore, Azure DevOps and Datadog. My responsibilities included technical and support delivery leadership, code reviews, sprint planning, release coordination, production issue handling, SLA adherence and knowledge-transfer sessions.
+
+The engagement covered more than 3,000 support/service tickets, with approximately five releases per week on average. Reliability and a quick response to business issues mattered in that environment. I also created an internal reporting tool to improve visibility into support and delivery activities. That work reinforced the value of traceability, clear ownership and operational information that helps people decide what to do next.
+
+That experience informed how I approached this assessment. I made the unit the common link between leases and condition reports, kept AI output open to owner review, and retained the evidence behind it. I also separated model interpretation from deterministic rules. An incorrect rent amount, lease date or unit assignment can have consequences beyond the screen where it appears. I wanted an owner to be able to check the information before approving a decision. This is an independent assessment project, not a system delivered to or endorsed by Aldar.
+
+## What I Would Do in the Next 30 Days
+
+The assessment deliberately covers two core workflows: lease review and condition reporting. With another 30 days, I would focus on making those workflows more accurate, faster to verify and safer to use across a portfolio. I would work in small, testable increments, starting with representative documents and photos rather than trying to build a complete property-management platform. The work below is planned, not implemented.
+
+### Days 1–7 — Improve AI accuracy and evidence
+
+- **Connect a real multimodal provider.** Implement the existing lease and vision provider interfaces without rewriting the domain workflows. Stub mode would stay available for automated tests, local development and demos without credentials. I would validate returned values and evidence IDs before persistence, while keeping deterministic rule checks and human approval separate from model reasoning.
+- **Add OCR and document preprocessing.** The current parser works with text-readable files and rejects scanned or empty PDFs. I would start with scanned PDFs, photographed documents and image-based leases, retaining page locations so OCR output can still be checked against the original.
+- **Highlight source evidence.** Build on the existing excerpts and page, paragraph or line references. Opening a monthly-rent source should show the corresponding passage highlighted in the document, rather than requiring the owner to find it manually.
+- **Detect contradictions more clearly.** Extend the existing ambiguity and rent-reconciliation checks to conflicting rent clauses, dates, unit IDs, renewal terms and signature statements. Model findings would remain review suggestions; arithmetic, date and occupancy checks would stay in application code.
+
+### Days 8–14 — Make owner review faster
+
+- **Put uncertain information first.** Prioritize missing fields, uncertain extractions and contradictions in the review order. Confidence could help internally once evaluated, while percentages would continue to stay out of the main UI. The current stub scores are not calibrated probabilities.
+- **Compare leases for the same unit.** Add a previous-versus-new view for renewals, highlighting changes in rent, deposit, start/end dates, escalation, renewal and termination clauses. Comparison would not replace a confirmed lease or change occupancy automatically.
+- **Extend review metadata into an audit trail.** The project already preserves original AI values, owner corrections and the latest decision timestamps. I would add append-only review events recording the original value, correction, accepted/rejected decision and time, so successive decisions remain visible.
+- **Add straightforward portfolio filters.** Start with available/occupied units, leases needing review, failed acceptance rules and units with open issues. This would help owners find pending work without adding a separate dashboard.
+
+### Days 15–21 — Make property issues more useful
+
+- **Flag possible duplicate issues.** Before generating another draft, check whether the unit already has a similar unresolved report, such as repeated photos of the same AC leak. Show the possible match for owner review rather than silently merging reports or creating duplicate maintenance work.
+- **Make issue history easier to inspect.** Reports are already stored against the unit. I would add a chronological view that makes recurring AC leaks, moisture damage or appliance problems easier to spot, without treating a pattern as a confirmed diagnosis.
+- **Suggest issue priority.** Let the agent suggest Low, Medium or High based on visible evidence, with a reason and source photos. The owner would approve the priority; it would not trigger scheduling or dispatch.
+- **Allow draft work-order edits.** Owners can currently accept or reject a draft. I would let them edit its title and description before acceptance, preserving both the original AI draft and the final owner-approved version, as lease-field corrections already do.
+
+### Days 22–30 — Prepare the system for real usage
+
+- **Introduce background jobs.** Move parsing, OCR, AI calls and image processing out of synchronous HTTP requests. Larger documents and model latency make durable job status, bounded retries and clear failure feedback necessary. Review and occupancy gates would remain unchanged.
+- **Move uploads to object storage.** Put storage behind an interface and implement AWS S3 or Azure Blob Storage, with private files and short-lived signed access where needed. Local storage would remain useful for development.
+- **Add authentication and basic roles.** Introduce Owner, Property Manager and Inspector access, including checks on which property records each person can read or review. Authentication and role management were intentionally excluded from this assessment; they are required before broader use.
+- **Build a correction-based evaluation loop.** An owner changing rent from QAR 15,000 to QAR 12,500 should become a reviewed evaluation example. So should correcting “No visible damage” to “Water damage visible below AC,” together with the relevant photos. I would use these examples to build a held-out dataset for measuring extraction and vision accuracy, then compare providers and prompts against it. A newer model should earn its place through measured results, rather than an assumption that it improves the product. Corrections would feed evaluation, not automatic changes to financial values or model training without a separate decision.
+
+### Why these first?
+
+Rent collection, vendor management, messaging and maintenance scheduling could all follow. I would first strengthen the two workflows this assessment demonstrates: information that owners can verify, review decisions that remain traceable, and issues that are useful across a portfolio. AI would suggest, software would validate deterministic rules, and people would approve decisions with operational consequences. Broader automation becomes more useful once those foundations are dependable.
+
 ## Scale pressure and architecture evolution
 
 Synchronous parsing/model calls and in-memory multipart uploads would hit CPU, memory, latency and concurrency limits first. Large document decompression, local filesystem capacity, unpaginated unit aggregates and model costs would follow. A single PostgreSQL instance and repeated full-unit refreshes suit five units, not a large portfolio.
@@ -262,6 +306,6 @@ The current parser/provider/service boundaries allow processing to move behind b
 
 Authentication, signup/login, user management, RBAC, payments/rent collection/accounting, notifications/email/SMS, tenant portal, chat/chatbot, calendar, maps, analytics, vendors/technician assignment, invoices, scheduling, cloud deployment, queues, Redis, Elasticsearch, GraphQL and mobile apps. No unrelated CRUD screens, marketing dashboard, or generic document library.
 
-## Future enhancements — NOT IMPLEMENTED
+## Longer-Term Possibilities — NOT IMPLEMENTED
 
-Real multimodal providers and evaluation/feedback; OCR for scanned leases; object storage; asynchronous processing; append-only review event history; role-based access before public deployment; a maintenance/vendor workflow; document highlighting; and search/pagination for larger portfolios. These are documentation suggestions only.
+A maintenance/vendor workflow and pagination for larger portfolios would follow the priorities above. Any future dispatch flow would require explicit authorization beyond accepting the current draft. These remain documentation ideas, not implemented functionality.
